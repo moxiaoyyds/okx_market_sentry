@@ -72,6 +72,7 @@ func (cn *ConsoleNotifier) printAlert(alert *types.AlertData) {
 // PushPlusNotifier PushPlus通知器
 type PushPlusNotifier struct {
 	userToken  string
+	to         string // 好友令牌，多人用逗号分隔
 	enabled    bool
 	httpClient *http.Client
 }
@@ -81,6 +82,7 @@ type PushPlusRequest struct {
 	Title    string `json:"title"`
 	Content  string `json:"content"`
 	Template string `json:"template"`
+	To       string `json:"to,omitempty"` // 好友令牌，给朋友发送通知
 }
 
 type PushPlusResponse struct {
@@ -89,16 +91,22 @@ type PushPlusResponse struct {
 	Data string `json:"data"`
 }
 
-func NewPushPlusNotifier(userToken string) Interface {
+func NewPushPlusNotifier(userToken, to string) Interface {
 	// 如果没有配置user token，返回控制台通知器
 	if userToken == "" {
 		fmt.Println("🔧 未配置PushPlus User Token，使用控制台输出模式")
 		return NewConsoleNotifier()
 	}
 
-	fmt.Println("✅ 已配置PushPlus通知服务")
+	if to != "" {
+		fmt.Printf("✅ 已配置PushPlus通知服务（包含好友推送: %s）\n", to)
+	} else {
+		fmt.Println("✅ 已配置PushPlus通知服务")
+	}
+
 	return &PushPlusNotifier{
 		userToken: userToken,
+		to:        to,
 		enabled:   true,
 		httpClient: &http.Client{
 			Timeout: 10 * time.Second,
@@ -158,11 +166,11 @@ func (ppn *PushPlusNotifier) buildHTMLContent(alert *types.AlertData) string {
         <strong>💡 该交易对出现显著%s，请关注市场动向！</strong>
     </div>
 </div>
-`, 
-		color, color, arrow, 
-		alert.Symbol, 
-		alert.CurrentPrice, 
-		alert.PastPrice, 
+`,
+		color, color, arrow,
+		alert.Symbol,
+		alert.CurrentPrice,
+		alert.PastPrice,
 		color, alert.ChangePercent,
 		alert.AlertTime.Format("2006-01-02 15:04:05"),
 		color, changeText)
@@ -177,6 +185,7 @@ func (ppn *PushPlusNotifier) sendPushPlusMessage(title, content string) error {
 		Title:    title,
 		Content:  content,
 		Template: "html",
+		To:       ppn.to, // 添加好友令牌支持
 	}
 
 	// 序列化为JSON
