@@ -1,0 +1,18 @@
+log_level: info
+
+redis:
+  url: localhost:6379
+  password:
+  db: 0
+
+dingtalk:
+  webhook_url:   # 钉钉机器人 Webhook URL (兼容保留)
+
+alert:
+  threshold: 3.0  # 预警阈值百分比
+
+fetch:
+  interval: 1m  # 数据获取间隔
+
+pushplus:
+  user_token:   # PushPlus用户令牌，用于微信推送通知
