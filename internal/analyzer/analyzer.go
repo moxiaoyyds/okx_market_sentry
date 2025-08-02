@@ -12,19 +12,21 @@ import (
 
 // AnalysisEngine 分析引擎
 type AnalysisEngine struct {
-	stateManager *storage.StateManager
-	notifier     notifier.Interface
-	threshold    float64
-	alertHistory map[string]time.Time // 防止重复预警
-	mutex        sync.RWMutex
+	stateManager  *storage.StateManager
+	notifier      notifier.Interface
+	threshold     float64
+	monitorPeriod time.Duration        // 监控周期
+	alertHistory  map[string]time.Time // 防止重复预警
+	mutex         sync.RWMutex
 }
 
-func NewAnalysisEngine(stateManager *storage.StateManager, notifyService notifier.Interface, threshold float64) *AnalysisEngine {
+func NewAnalysisEngine(stateManager *storage.StateManager, notifyService notifier.Interface, threshold float64, monitorPeriod time.Duration) *AnalysisEngine {
 	return &AnalysisEngine{
-		stateManager: stateManager,
-		notifier:     notifyService,
-		threshold:    threshold,
-		alertHistory: make(map[string]time.Time),
+		stateManager:  stateManager,
+		notifier:      notifyService,
+		threshold:     threshold,
+		monitorPeriod: monitorPeriod,
+		alertHistory:  make(map[string]time.Time),
 	}
 }
 
@@ -90,6 +92,7 @@ func (ae *AnalysisEngine) analyzeSymbol(symbol string) *types.AlertData {
 				PastPrice:     past.Price,
 				ChangePercent: changePercent,
 				AlertTime:     time.Now(),
+				MonitorPeriod: ae.monitorPeriod,
 			}
 
 			// 记录预警历史
@@ -139,8 +142,8 @@ func (ae *AnalysisEngine) shouldAlert(symbol string) bool {
 		return true
 	}
 
-	// 如果距离上次预警超过5分钟，则可以再次预警
-	return time.Since(lastAlert) > 5*time.Minute
+	// 如果距离上次预警超过监控周期，则可以再次预警
+	return time.Since(lastAlert) > ae.monitorPeriod
 }
 
 // recordAlert 记录预警历史

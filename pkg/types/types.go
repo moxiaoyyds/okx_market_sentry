@@ -10,11 +10,12 @@ type PriceDataPoint struct {
 
 // AlertData 预警数据
 type AlertData struct {
-	Symbol        string    `json:"symbol"`
-	CurrentPrice  float64   `json:"current_price"`
-	PastPrice     float64   `json:"past_price"`
-	ChangePercent float64   `json:"change_percent"`
-	AlertTime     time.Time `json:"alert_time"`
+	Symbol        string        `json:"symbol"`
+	CurrentPrice  float64       `json:"current_price"`
+	PastPrice     float64       `json:"past_price"`
+	ChangePercent float64       `json:"change_percent"`
+	AlertTime     time.Time     `json:"alert_time"`
+	MonitorPeriod time.Duration `json:"monitor_period"` // 监控周期
 }
 
 // Config 配置结构
@@ -45,7 +46,8 @@ type PushPlusConfig struct {
 }
 
 type AlertConfig struct {
-	Threshold float64 `mapstructure:"threshold"`
+	Threshold     float64       `mapstructure:"threshold"`
+	MonitorPeriod time.Duration `mapstructure:"monitor_period"` // 监控周期，用于价格对比
 }
 
 type FetchConfig struct {

@@ -51,6 +51,7 @@ func setDefaults() {
 	viper.SetDefault("pushplus.user_token", "")
 	viper.SetDefault("pushplus.to", "")
 	viper.SetDefault("alert.threshold", 3.0)
+	viper.SetDefault("alert.monitor_period", 5*time.Minute)
 	viper.SetDefault("fetch.interval", time.Minute)
 	viper.SetDefault("network.proxy", "")
 	viper.SetDefault("network.timeout", 30*time.Second)

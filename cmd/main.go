@@ -34,7 +34,7 @@ func main() {
 	defer cancel()
 
 	// 初始化各模块
-	stateManager := storage.NewStateManager(cfg.Redis)
+	stateManager := storage.NewStateManager(cfg.Redis, cfg.Alert.MonitorPeriod)
 	dataFetcher := fetcher.NewDataFetcher(stateManager, cfg.Network)
 
 	// 根据配置选择通知服务（优先级：钉钉 > PushPlus > 控制台）
@@ -47,8 +47,8 @@ func main() {
 		notifyService = notifier.NewConsoleNotifier()
 	}
 
-	analysisEngine := analyzer.NewAnalysisEngine(stateManager, notifyService, cfg.Alert.Threshold)
-	taskScheduler := scheduler.NewScheduler(dataFetcher, analysisEngine, stateManager)
+	analysisEngine := analyzer.NewAnalysisEngine(stateManager, notifyService, cfg.Alert.Threshold, cfg.Alert.MonitorPeriod)
+	taskScheduler := scheduler.NewScheduler(dataFetcher, analysisEngine, stateManager, cfg.Alert.MonitorPeriod)
 
 	// 启动服务
 	var wg sync.WaitGroup

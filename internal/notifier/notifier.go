@@ -26,6 +26,19 @@ func safePadding(content string, totalWidth int) int {
 	return padding
 }
 
+// formatDuration 格式化时间周期为中文描述
+func formatDuration(d time.Duration) string {
+	if d < time.Minute {
+		return fmt.Sprintf("%.0f秒", d.Seconds())
+	} else if d < time.Hour {
+		return fmt.Sprintf("%.0f分钟", d.Minutes())
+	} else if d < 24*time.Hour {
+		return fmt.Sprintf("%.1f小时", d.Hours())
+	} else {
+		return fmt.Sprintf("%.1f天", d.Hours()/24)
+	}
+}
+
 // Interface 通知接口
 type Interface interface {
 	SendAlert(alert *types.AlertData) error
@@ -76,7 +89,7 @@ func (cn *ConsoleNotifier) printAlert(alert *types.AlertData) {
 	fmt.Println("║" + strings.Repeat(" ", 60) + "║")
 	fmt.Printf("║ 交易对: %-47s ║\n", alert.Symbol)
 	fmt.Printf("║ 当前价格: $%-43.6f ║\n", alert.CurrentPrice)
-	fmt.Printf("║ 5分钟前价格: $%-39.6f ║\n", alert.PastPrice)
+	fmt.Printf("║ %s前价格: $%-39.6f ║\n", formatDuration(alert.MonitorPeriod), alert.PastPrice)
 
 	// 根据涨跌幅显示不同颜色的提示
 	changeStr := fmt.Sprintf("%.2f%%", alert.ChangePercent)
@@ -268,7 +281,7 @@ func (ppn *PushPlusNotifier) buildHTMLContent(alert *types.AlertData) string {
     <div style="background-color: white; padding: 15px; border-radius: 8px; margin: 10px 0;">
         <p><strong>交易对:</strong> <span style="font-size: 18px; color: #333;">%s</span></p>
         <p><strong>当前价格:</strong> <span style="font-size: 16px; color: #333;">$%.6f</span></p>
-        <p><strong>5分钟前价格:</strong> <span style="font-size: 16px; color: #333;">$%.6f</span></p>
+        <p><strong>%s前价格:</strong> <span style="font-size: 16px; color: #333;">$%.6f</span></p>
         <p><strong>价格变化:</strong> <span style="font-size: 18px; font-weight: bold; color: %s;">%+.2f%%</span></p>
         <p><strong>预警时间:</strong> <span style="color: #666;">%s</span></p>
     </div>
@@ -281,7 +294,7 @@ func (ppn *PushPlusNotifier) buildHTMLContent(alert *types.AlertData) string {
 		color, color, arrow,
 		alert.Symbol,
 		alert.CurrentPrice,
-		alert.PastPrice,
+		formatDuration(alert.MonitorPeriod), alert.PastPrice,
 		color, alert.ChangePercent,
 		alert.AlertTime.Format("2006-01-02 15:04:05"),
 		color, changeText)
@@ -565,7 +578,7 @@ func (dtn *DingTalkNotifier) buildMarkdownContent(alert *types.AlertData) string
 
 **交易对**: %s  
 **当前价格**: $%.6f  
-**5分钟前价格**: $%.6f  
+**%s前价格**: $%.6f  
 **价格变化**: <font color="%s">%+.2f%%</font>  
 **预警时间**: %s  
 
@@ -573,7 +586,7 @@ func (dtn *DingTalkNotifier) buildMarkdownContent(alert *types.AlertData) string
 		arrow,
 		alert.Symbol,
 		alert.CurrentPrice,
-		alert.PastPrice,
+		formatDuration(alert.MonitorPeriod), alert.PastPrice,
 		color, alert.ChangePercent,
 		alert.AlertTime.Format("2006-01-02 15:04:05"),
 		arrow, changeText)

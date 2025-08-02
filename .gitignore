@@ -52,6 +52,7 @@ fabric.properties
 
 # Local development configuration
 configs/config.local.yaml
+configs/config.local.yaml.example
 *.local.yaml
 
 # Binary output

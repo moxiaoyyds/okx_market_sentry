@@ -113,10 +113,10 @@ type StateManager struct {
 	useRedis     bool
 }
 
-func NewStateManager(redisConfig types.RedisConfig) *StateManager {
+func NewStateManager(redisConfig types.RedisConfig, monitorPeriod time.Duration) *StateManager {
 	sm := &StateManager{
 		priceHistory: make(map[string]*CircularQueue),
-		windowSize:   5 * time.Minute,
+		windowSize:   monitorPeriod, // 使用配置的监控周期
 	}
 
 	// 尝试连接Redis
@@ -130,7 +130,7 @@ func NewStateManager(redisConfig types.RedisConfig) *StateManager {
 		// 测试连接
 		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 		defer cancel()
-		
+
 		_, err := sm.redisClient.Ping(ctx).Result()
 		if err != nil {
 			fmt.Printf("⚠️  Redis连接失败，使用纯内存模式: %v\n", err)
@@ -198,7 +198,7 @@ func (sm *StateManager) backupToRedis(symbol string, point types.PriceDataPoint)
 
 	// 设置过期时间，只保留10分钟数据
 	sm.redisClient.Expire(ctx, key, 10*time.Minute)
-	
+
 	// 清理旧数据，只保留最近10分钟
 	cutoff := float64(time.Now().Add(-10 * time.Minute).Unix())
 	sm.redisClient.ZRemRangeByScore(ctx, key, "0", fmt.Sprintf("%.0f", cutoff))
@@ -239,7 +239,7 @@ func (sm *StateManager) GetAllSymbols() []string {
 // GetRedisStats 获取Redis统计信息
 func (sm *StateManager) GetRedisStats() map[string]interface{} {
 	stats := map[string]interface{}{
-		"redis_enabled": sm.useRedis,
+		"redis_enabled":  sm.useRedis,
 		"memory_symbols": len(sm.priceHistory),
 	}
 

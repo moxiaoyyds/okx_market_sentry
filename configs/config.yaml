@@ -10,7 +10,8 @@ dingtalk:
   secret:        # 钉钉机器人加签密钥 (SEC开头的字符串)
 
 alert:
-  threshold: 3.0  # 预警阈值百分比
+  threshold: 3.0       # 预警阈值百分比
+  monitor_period: 10m   # 监控周期，支持格式: 1m, 5m, 10m, 1h 等
 
 fetch:
   interval: 1m  # 数据获取间隔
