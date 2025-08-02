@@ -2,9 +2,13 @@ package notifier
 
 import (
 	"bytes"
+	"crypto/hmac"
+	"crypto/sha256"
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"net/url"
 	"okx-market-sentry/pkg/types"
 	"strings"
 	"time"
@@ -394,22 +398,56 @@ func (ppn *PushPlusNotifier) buildBatchHTMLContent(alerts []*types.AlertData) st
 	return content
 }
 
-// DingTalkNotifier 钉钉通知器（保留兼容性）
+// DingTalkNotifier 钉钉通知器
 type DingTalkNotifier struct {
 	webhookURL string
+	secret     string
 	enabled    bool
+	httpClient *http.Client
 }
 
-func NewDingTalkNotifier(webhookURL string) Interface {
+// DingTalkMessage 钉钉消息结构
+type DingTalkMessage struct {
+	MsgType  string            `json:"msgtype"`
+	Markdown *DingTalkMarkdown `json:"markdown,omitempty"`
+	At       *DingTalkAt       `json:"at,omitempty"`
+}
+
+type DingTalkMarkdown struct {
+	Title string `json:"title"`
+	Text  string `json:"text"`
+}
+
+type DingTalkAt struct {
+	AtAll bool `json:"isAtAll"`
+}
+
+// DingTalkResponse 钉钉API响应
+type DingTalkResponse struct {
+	ErrCode int    `json:"errcode"`
+	ErrMsg  string `json:"errmsg"`
+}
+
+func NewDingTalkNotifier(webhookURL, secret string) Interface {
 	// 如果没有配置webhook URL，返回控制台通知器
 	if webhookURL == "" {
 		fmt.Println("🔧 未配置钉钉Webhook URL，使用控制台输出模式")
 		return NewConsoleNotifier()
 	}
 
+	if secret != "" {
+		fmt.Println("✅ 已配置钉钉通知服务（含加签验证）")
+	} else {
+		fmt.Println("⚠️ 钉钉通知已配置，但未设置secret（建议配置加签验证）")
+	}
+
 	return &DingTalkNotifier{
 		webhookURL: webhookURL,
+		secret:     secret,
 		enabled:    true,
+		httpClient: &http.Client{
+			Timeout: 10 * time.Second,
+		},
 	}
 }
 
@@ -420,9 +458,20 @@ func (dtn *DingTalkNotifier) SendAlert(alert *types.AlertData) error {
 		return console.SendAlert(alert)
 	}
 
-	// TODO: 实现真实的钉钉发送逻辑
-	fmt.Printf("📤 [钉钉通知] %s 涨幅 %.2f%% (未实现钉钉发送)\n",
-		alert.Symbol, alert.ChangePercent)
+	// 构建钉钉消息内容
+	title := fmt.Sprintf("📈 OKX价格预警 - %s", alert.Symbol)
+	content := dtn.buildMarkdownContent(alert)
+
+	// 发送钉钉通知
+	err := dtn.sendDingTalkMessage(title, content)
+	if err != nil {
+		fmt.Printf("❌ 钉钉发送失败: %v，降级为控制台输出\n", err)
+		// 降级为控制台输出
+		console := NewConsoleNotifier()
+		return console.SendAlert(alert)
+	}
+
+	fmt.Printf("✅ 钉钉通知已发送: %s 变化 %+.2f%%\n", alert.Symbol, alert.ChangePercent)
 
 	return nil
 }
@@ -442,7 +491,193 @@ func (dtn *DingTalkNotifier) SendBatchAlerts(alerts []*types.AlertData) error {
 		return console.SendBatchAlerts(alerts)
 	}
 
-	// TODO: 实现真实的钉钉批量发送逻辑
-	fmt.Printf("📤 [钉钉批量通知] %d个币种预警 (未实现钉钉发送)\n", len(alerts))
+	// 构建批量预警消息
+	title := fmt.Sprintf("📊 OKX批量价格预警 - %d个币种", len(alerts))
+	content := dtn.buildBatchMarkdownContent(alerts)
+
+	// 发送钉钉通知
+	err := dtn.sendDingTalkMessage(title, content)
+	if err != nil {
+		fmt.Printf("❌ 钉钉批量发送失败: %v，降级为控制台输出\n", err)
+		// 降级为控制台输出
+		console := NewConsoleNotifier()
+		return console.SendBatchAlerts(alerts)
+	}
+
+	fmt.Printf("✅ 钉钉批量通知已发送: %d个币种预警\n", len(alerts))
+	return nil
+}
+
+// generateSignature 生成钉钉加签
+func (dtn *DingTalkNotifier) generateSignature(timestamp int64) (string, error) {
+	if dtn.secret == "" {
+		return "", nil // 没有secret则不加签
+	}
+
+	// 按照文档要求: timestamp + "\n" + secret
+	stringToSign := fmt.Sprintf("%d\n%s", timestamp, dtn.secret)
+
+	// HMAC-SHA256签名
+	h := hmac.New(sha256.New, []byte(dtn.secret))
+	h.Write([]byte(stringToSign))
+	signature := base64.StdEncoding.EncodeToString(h.Sum(nil))
+
+	// URL编码
+	return url.QueryEscape(signature), nil
+}
+
+// buildSignedURL 构建带签名的URL
+func (dtn *DingTalkNotifier) buildSignedURL() (string, error) {
+	timestamp := time.Now().UnixNano() / 1e6 // 毫秒时间戳
+
+	if dtn.secret == "" {
+		return dtn.webhookURL, nil
+	}
+
+	signature, err := dtn.generateSignature(timestamp)
+	if err != nil {
+		return "", err
+	}
+
+	// 添加timestamp和sign参数
+	separator := "&"
+	if !strings.Contains(dtn.webhookURL, "?") {
+		separator = "?"
+	}
+
+	return fmt.Sprintf("%s%stimestamp=%d&sign=%s",
+		dtn.webhookURL, separator, timestamp, signature), nil
+}
+
+// buildMarkdownContent 构建单个预警的Markdown内容
+func (dtn *DingTalkNotifier) buildMarkdownContent(alert *types.AlertData) string {
+	arrow := "📈"
+	color := "green"
+	changeText := "上涨"
+
+	if alert.ChangePercent < 0 {
+		arrow = "📉"
+		color = "red"
+		changeText = "下跌"
+	}
+
+	content := fmt.Sprintf(`## %s 价格预警触发
+
+**交易对**: %s  
+**当前价格**: $%.6f  
+**5分钟前价格**: $%.6f  
+**价格变化**: <font color="%s">%+.2f%%</font>  
+**预警时间**: %s  
+
+> %s 该交易对出现显著%s，请关注市场动向！`,
+		arrow,
+		alert.Symbol,
+		alert.CurrentPrice,
+		alert.PastPrice,
+		color, alert.ChangePercent,
+		alert.AlertTime.Format("2006-01-02 15:04:05"),
+		arrow, changeText)
+
+	return content
+}
+
+// buildBatchMarkdownContent 构建批量预警的Markdown内容
+func (dtn *DingTalkNotifier) buildBatchMarkdownContent(alerts []*types.AlertData) string {
+	// 统计涨跌情况
+	upCount := 0
+	downCount := 0
+	for _, alert := range alerts {
+		if alert.ChangePercent > 0 {
+			upCount++
+		} else {
+			downCount++
+		}
+	}
+
+	content := fmt.Sprintf(`## 🚨 批量价格预警触发
+
+**预警统计**:  
+📈 上涨币种: <font color="green">%d个</font>  
+📉 下跌币种: <font color="red">%d个</font>  
+🕐 预警时间: %s  
+
+**详细列表**:  
+`, upCount, downCount, alerts[0].AlertTime.Format("2006-01-02 15:04:05"))
+
+	// 只显示前10个，避免消息过长
+	maxShow := 10
+	if len(alerts) > maxShow {
+		content += fmt.Sprintf("显示前%d个（共%d个）:\n", maxShow, len(alerts))
+	}
+
+	for i, alert := range alerts {
+		if i >= maxShow {
+			break
+		}
+
+		arrow := "📈"
+		color := "green"
+		if alert.ChangePercent < 0 {
+			arrow = "📉"
+			color = "red"
+		}
+
+		content += fmt.Sprintf("- %s **%s**: $%.6f (<font color=\"%s\">%+.2f%%</font>)\n",
+			arrow, alert.Symbol, alert.CurrentPrice, color, alert.ChangePercent)
+	}
+
+	if len(alerts) > maxShow {
+		content += fmt.Sprintf("\n... 还有%d个币种预警，请查看详细日志", len(alerts)-maxShow)
+	}
+
+	content += "\n\n> ⚠️ 多个交易对同时出现显著波动，请密切关注市场动向！"
+
+	return content
+}
+
+// sendDingTalkMessage 发送钉钉消息
+func (dtn *DingTalkNotifier) sendDingTalkMessage(title, content string) error {
+	// 构建带签名的URL
+	signedURL, err := dtn.buildSignedURL()
+	if err != nil {
+		return fmt.Errorf("生成签名失败: %v", err)
+	}
+
+	// 构建消息体
+	message := &DingTalkMessage{
+		MsgType: "markdown",
+		Markdown: &DingTalkMarkdown{
+			Title: title,
+			Text:  content,
+		},
+		At: &DingTalkAt{
+			AtAll: false, // 不@所有人，避免过度打扰
+		},
+	}
+
+	// 序列化为JSON
+	jsonData, err := json.Marshal(message)
+	if err != nil {
+		return fmt.Errorf("序列化消息失败: %v", err)
+	}
+
+	// 发送HTTP请求
+	resp, err := dtn.httpClient.Post(signedURL, "application/json", bytes.NewBuffer(jsonData))
+	if err != nil {
+		return fmt.Errorf("HTTP请求失败: %v", err)
+	}
+	defer resp.Body.Close()
+
+	// 解析响应
+	var dingResp DingTalkResponse
+	if err := json.NewDecoder(resp.Body).Decode(&dingResp); err != nil {
+		return fmt.Errorf("解析响应失败: %v", err)
+	}
+
+	// 检查返回结果
+	if dingResp.ErrCode != 0 {
+		return fmt.Errorf("钉钉API错误 [%d]: %s", dingResp.ErrCode, dingResp.ErrMsg)
+	}
+
 	return nil
 }

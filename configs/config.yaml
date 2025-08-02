@@ -6,7 +6,8 @@ redis:
   db: 0
 
 dingtalk:
-  webhook_url:   # 钉钉机器人 Webhook URL (兼容保留)
+  webhook_url:   # 钉钉机器人 Webhook URL
+  secret:        # 钉钉机器人加签密钥 (SEC开头的字符串)
 
 alert:
   threshold: 3.0  # 预警阈值百分比

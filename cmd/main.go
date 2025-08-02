@@ -36,7 +36,17 @@ func main() {
 	// 初始化各模块
 	stateManager := storage.NewStateManager(cfg.Redis)
 	dataFetcher := fetcher.NewDataFetcher(stateManager, cfg.Network)
-	notifyService := notifier.NewPushPlusNotifier(cfg.PushPlus.UserToken, cfg.PushPlus.To)
+
+	// 根据配置选择通知服务（优先级：钉钉 > PushPlus > 控制台）
+	var notifyService notifier.Interface
+	if cfg.DingTalk.WebhookURL != "" {
+		notifyService = notifier.NewDingTalkNotifier(cfg.DingTalk.WebhookURL, cfg.DingTalk.Secret)
+	} else if cfg.PushPlus.UserToken != "" {
+		notifyService = notifier.NewPushPlusNotifier(cfg.PushPlus.UserToken, cfg.PushPlus.To)
+	} else {
+		notifyService = notifier.NewConsoleNotifier()
+	}
+
 	analysisEngine := analyzer.NewAnalysisEngine(stateManager, notifyService, cfg.Alert.Threshold)
 	taskScheduler := scheduler.NewScheduler(dataFetcher, analysisEngine, stateManager)
 

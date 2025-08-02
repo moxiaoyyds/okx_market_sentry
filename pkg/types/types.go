@@ -36,6 +36,7 @@ type RedisConfig struct {
 
 type DingTalkConfig struct {
 	WebhookURL string `mapstructure:"webhook_url"`
+	Secret     string `mapstructure:"secret"`
 }
 
 type PushPlusConfig struct {

@@ -47,6 +47,7 @@ func setDefaults() {
 	viper.SetDefault("redis.password", "")
 	viper.SetDefault("redis.db", 0)
 	viper.SetDefault("dingtalk.webhook_url", "")
+	viper.SetDefault("dingtalk.secret", "")
 	viper.SetDefault("pushplus.user_token", "")
 	viper.SetDefault("pushplus.to", "")
 	viper.SetDefault("alert.threshold", 3.0)
