@@ -17,7 +17,7 @@
 
 ### 环境要求
 
-- Go 1.21+
+- Go 1.23+
 - Redis (可选，推荐用于生产环境)
 - Docker & Docker Compose (可选)
 
@@ -27,16 +27,13 @@
 ```bash
 git clone <repository-url>
 cd okx-market-sentry
-go mod download
+go mod tidy
 ```
 
 2. **配置应用**
 ```bash
-# 复制配置文件模板
-cp configs/config.yaml configs/config.local.yaml
-
 # 编辑配置文件，填入你的通知配置
-nano configs/config.local.yaml
+vim configs/config.yaml
 ```
 
 3. **运行项目**

@@ -1,10 +1,10 @@
-FROM golang:1.21-alpine AS builder
+FROM golang:1.24-alpine AS builder
 
 WORKDIR /app
 
 # 复制 go mod 文件并下载依赖
 COPY go.mod go.sum ./
-RUN go mod download
+RUN go mod tidy
 
 # 复制源代码
 COPY . .

@@ -1,7 +1,7 @@
 log_level: info
 
 redis:
-  url: localhost:6379
+  url: redis:6379
   password:
   db: 0
 
