@@ -8,11 +8,24 @@ import (
 	"okx-market-sentry/pkg/types"
 	"strings"
 	"time"
+	"unicode/utf8"
 )
+
+// safePadding 安全地计算填充空格数量，避免负数
+func safePadding(content string, totalWidth int) int {
+	// 使用utf8.RuneCountInString计算实际显示字符数，而不是字节数
+	runeCount := utf8.RuneCountInString(content)
+	padding := totalWidth - runeCount - 4 // 4是边框字符数
+	if padding < 0 {
+		padding = 0
+	}
+	return padding
+}
 
 // Interface 通知接口
 type Interface interface {
 	SendAlert(alert *types.AlertData) error
+	SendBatchAlerts(alerts []*types.AlertData) error
 }
 
 // ConsoleNotifier 控制台通知器
@@ -25,6 +38,20 @@ func NewConsoleNotifier() *ConsoleNotifier {
 func (cn *ConsoleNotifier) SendAlert(alert *types.AlertData) error {
 	// 生成漂亮的控制台输出
 	cn.printAlert(alert)
+	return nil
+}
+
+func (cn *ConsoleNotifier) SendBatchAlerts(alerts []*types.AlertData) error {
+	if len(alerts) == 0 {
+		return nil
+	}
+
+	if len(alerts) == 1 {
+		return cn.SendAlert(alerts[0])
+	}
+
+	// 批量预警的控制台输出
+	cn.printBatchAlerts(alerts)
 	return nil
 }
 
@@ -64,6 +91,54 @@ func (cn *ConsoleNotifier) printAlert(alert *types.AlertData) {
 	} else {
 		fmt.Printf("║ 💡 该交易对出现显著下跌，请关注风险控制！%-14s ║\n", "")
 	}
+
+	fmt.Println(bottomBorder)
+	fmt.Println()
+}
+
+func (cn *ConsoleNotifier) printBatchAlerts(alerts []*types.AlertData) {
+	// 创建批量预警的漂亮输出
+	border := "╔" + strings.Repeat("═", 80) + "╗"
+	bottomBorder := "╚" + strings.Repeat("═", 80) + "╝"
+
+	fmt.Println()
+	fmt.Println(border)
+
+	// 标题行
+	title := fmt.Sprintf("🚨 批量价格预警触发！- %d个币种", len(alerts))
+	padding := safePadding(title, 80)
+	fmt.Printf("║ %s%s ║\n", title, strings.Repeat(" ", padding))
+	fmt.Println("║" + strings.Repeat(" ", 80) + "║")
+
+	// 显示预警列表
+	for i, alert := range alerts {
+		arrow := "📈"
+		if alert.ChangePercent < 0 {
+			arrow = "📉"
+		}
+
+		changeStr := fmt.Sprintf("%+.2f%%", alert.ChangePercent)
+		content := fmt.Sprintf("%d. %s %s: $%.6f (%s)",
+			i+1, arrow, alert.Symbol, alert.CurrentPrice, changeStr)
+
+		// 使用安全的填充计算
+		padding := safePadding(content, 80)
+		fmt.Printf("║ %s%s ║\n", content, strings.Repeat(" ", padding))
+	}
+
+	fmt.Println("║" + strings.Repeat(" ", 80) + "║")
+
+	// 预警时间
+	timeStr := fmt.Sprintf("预警时间: %s", alerts[0].AlertTime.Format("2006-01-02 15:04:05"))
+	padding = safePadding(timeStr, 80)
+	fmt.Printf("║ %s%s ║\n", timeStr, strings.Repeat(" ", padding))
+
+	fmt.Println("║" + strings.Repeat(" ", 80) + "║")
+
+	// 提示信息
+	msg := "💡 多个交易对同时出现显著波动，请密切关注市场动向！"
+	padding = safePadding(msg, 80)
+	fmt.Printf("║ %s%s ║\n", msg, strings.Repeat(" ", padding))
 
 	fmt.Println(bottomBorder)
 	fmt.Println()
@@ -135,6 +210,38 @@ func (ppn *PushPlusNotifier) SendAlert(alert *types.AlertData) error {
 	}
 
 	fmt.Printf("✅ PushPlus通知已发送: %s 变化 %+.2f%%\n", alert.Symbol, alert.ChangePercent)
+	return nil
+}
+
+func (ppn *PushPlusNotifier) SendBatchAlerts(alerts []*types.AlertData) error {
+	if len(alerts) == 0 {
+		return nil
+	}
+
+	if len(alerts) == 1 {
+		return ppn.SendAlert(alerts[0])
+	}
+
+	if !ppn.enabled {
+		// 降级为控制台输出
+		console := NewConsoleNotifier()
+		return console.SendBatchAlerts(alerts)
+	}
+
+	// 构建批量预警消息
+	title := fmt.Sprintf("📊 OKX批量价格预警 - %d个币种", len(alerts))
+	content := ppn.buildBatchHTMLContent(alerts)
+
+	// 发送PushPlus通知
+	err := ppn.sendPushPlusMessage(title, content)
+	if err != nil {
+		fmt.Printf("❌ PushPlus批量发送失败: %v，降级为控制台输出\n", err)
+		// 降级为控制台输出
+		console := NewConsoleNotifier()
+		return console.SendBatchAlerts(alerts)
+	}
+
+	fmt.Printf("✅ PushPlus批量通知已发送: %d个币种预警\n", len(alerts))
 	return nil
 }
 
@@ -219,6 +326,74 @@ func (ppn *PushPlusNotifier) sendPushPlusMessage(title, content string) error {
 	return nil
 }
 
+func (ppn *PushPlusNotifier) buildBatchHTMLContent(alerts []*types.AlertData) string {
+	if len(alerts) == 0 {
+		return ""
+	}
+
+	// 统计涨跌情况
+	upCount := 0
+	downCount := 0
+	for _, alert := range alerts {
+		if alert.ChangePercent > 0 {
+			upCount++
+		} else {
+			downCount++
+		}
+	}
+
+	// 构建HTML格式的批量消息内容
+	content := fmt.Sprintf(`
+<div style="border: 2px solid #FF6B6B; border-radius: 10px; padding: 20px; margin: 10px; background-color: #f9f9f9;">
+    <h2 style="color: #FF6B6B; text-align: center; margin-top: 0;">🚨 批量价格预警触发</h2>
+    
+    <div style="background-color: #E3F2FD; padding: 15px; border-radius: 8px; margin: 10px 0;">
+        <p style="font-size: 16px; margin: 5px 0;"><strong>预警统计:</strong></p>
+        <p style="margin: 5px 0;">📈 上涨币种: <span style="color: #00C851; font-weight: bold;">%d个</span></p>
+        <p style="margin: 5px 0;">📉 下跌币种: <span style="color: #FF4444; font-weight: bold;">%d个</span></p>
+        <p style="margin: 5px 0;">🕐 预警时间: <span style="color: #666;">%s</span></p>
+    </div>
+    
+    <div style="background-color: white; padding: 15px; border-radius: 8px; margin: 10px 0; max-height: 400px; overflow-y: auto;">
+        <h3 style="color: #333; margin-top: 0;">详细列表:</h3>
+        <table style="width: 100%%; border-collapse: collapse;">
+            <tr style="background-color: #f0f0f0;">
+                <th style="padding: 8px; text-align: left; border-bottom: 1px solid #ddd;">币种</th>
+                <th style="padding: 8px; text-align: right; border-bottom: 1px solid #ddd;">当前价格</th>
+                <th style="padding: 8px; text-align: right; border-bottom: 1px solid #ddd;">涨跌幅</th>
+            </tr>`,
+		upCount, downCount, alerts[0].AlertTime.Format("2006-01-02 15:04:05"))
+
+	// 添加每个预警的详细信息
+	for _, alert := range alerts {
+		arrow := "📈"
+		color := "#00C851"
+		if alert.ChangePercent < 0 {
+			arrow = "📉"
+			color = "#FF4444"
+		}
+
+		content += fmt.Sprintf(`
+            <tr>
+                <td style="padding: 8px; border-bottom: 1px solid #eee;">%s %s</td>
+                <td style="padding: 8px; text-align: right; border-bottom: 1px solid #eee;">$%.6f</td>
+                <td style="padding: 8px; text-align: right; border-bottom: 1px solid #eee; color: %s; font-weight: bold;">%+.2f%%</td>
+            </tr>`,
+			arrow, alert.Symbol, alert.CurrentPrice, color, alert.ChangePercent)
+	}
+
+	content += `
+        </table>
+    </div>
+    
+    <div style="background-color: #FF6B6B; color: white; padding: 15px; border-radius: 8px; text-align: center; margin-top: 15px;">
+        <strong>⚠️ 多个交易对同时出现显著波动，请密切关注市场动向！</strong>
+    </div>
+</div>`
+
+	return content
+}
+
 // DingTalkNotifier 钉钉通知器（保留兼容性）
 type DingTalkNotifier struct {
 	webhookURL string
@@ -249,5 +424,25 @@ func (dtn *DingTalkNotifier) SendAlert(alert *types.AlertData) error {
 	fmt.Printf("📤 [钉钉通知] %s 涨幅 %.2f%% (未实现钉钉发送)\n",
 		alert.Symbol, alert.ChangePercent)
 
+	return nil
+}
+
+func (dtn *DingTalkNotifier) SendBatchAlerts(alerts []*types.AlertData) error {
+	if len(alerts) == 0 {
+		return nil
+	}
+
+	if len(alerts) == 1 {
+		return dtn.SendAlert(alerts[0])
+	}
+
+	if !dtn.enabled {
+		// 降级为控制台输出
+		console := NewConsoleNotifier()
+		return console.SendBatchAlerts(alerts)
+	}
+
+	// TODO: 实现真实的钉钉批量发送逻辑
+	fmt.Printf("📤 [钉钉批量通知] %d个币种预警 (未实现钉钉发送)\n", len(alerts))
 	return nil
 }

@@ -37,37 +37,39 @@ func (ae *AnalysisEngine) AnalyzeAll() {
 
 	fmt.Printf("开始分析 %d 个交易对的价格变化...\n", len(symbols))
 
-	// 并发分析各个交易对
+	// 并发分析各个交易对，收集预警
 	var wg sync.WaitGroup
-	alertCount := 0
 	var alertMutex sync.Mutex
+	alerts := make([]*types.AlertData, 0)
 
 	for _, symbol := range symbols {
 		wg.Add(1)
 		go func(sym string) {
 			defer wg.Done()
-			if ae.analyzeSymbol(sym) {
+			if alert := ae.analyzeSymbol(sym); alert != nil {
 				alertMutex.Lock()
-				alertCount++
+				alerts = append(alerts, alert)
 				alertMutex.Unlock()
 			}
 		}(symbol)
 	}
 	wg.Wait()
 
-	if alertCount > 0 {
-		fmt.Printf("✅ 分析完成，触发 %d 个预警\n", alertCount)
+	// 批量发送预警
+	if len(alerts) > 0 {
+		ae.sendBatchAlerts(alerts)
+		fmt.Printf("✅ 分析完成，触发 %d 个预警\n", len(alerts))
 	} else {
 		fmt.Printf("✅ 分析完成，暂无异常波动\n")
 	}
 }
 
-// analyzeSymbol 分析单个交易对
-func (ae *AnalysisEngine) analyzeSymbol(symbol string) bool {
+// analyzeSymbol 分析单个交易对，返回预警数据或nil
+func (ae *AnalysisEngine) analyzeSymbol(symbol string) *types.AlertData {
 	// 获取价格数据
 	current, past := ae.stateManager.GetPriceData(symbol)
 	if current == nil || past == nil {
-		return false // 数据不足，跳过分析
+		return nil // 数据不足，跳过分析
 	}
 
 	// 计算涨幅
@@ -90,20 +92,41 @@ func (ae *AnalysisEngine) analyzeSymbol(symbol string) bool {
 				AlertTime:     time.Now(),
 			}
 
-			// 发送预警
-			err := ae.notifier.SendAlert(alert)
-			if err != nil {
-				fmt.Printf("❌ 发送预警失败: %s - %v\n", symbol, err)
-				return false
-			}
-
 			// 记录预警历史
 			ae.recordAlert(symbol)
-			return true
+			return alert
 		}
 	}
 
-	return false
+	return nil
+}
+
+// sendBatchAlerts 批量发送预警
+func (ae *AnalysisEngine) sendBatchAlerts(alerts []*types.AlertData) {
+	if len(alerts) == 0 {
+		return
+	}
+
+	// 如果只有一个预警，使用单个发送
+	if len(alerts) == 1 {
+		err := ae.notifier.SendAlert(alerts[0])
+		if err != nil {
+			fmt.Printf("❌ 发送预警失败: %s - %v\n", alerts[0].Symbol, err)
+		}
+		return
+	}
+
+	// 批量发送多个预警
+	err := ae.notifier.SendBatchAlerts(alerts)
+	if err != nil {
+		fmt.Printf("❌ 批量发送预警失败: %v\n", err)
+		// 降级为单个发送
+		for _, alert := range alerts {
+			if singleErr := ae.notifier.SendAlert(alert); singleErr != nil {
+				fmt.Printf("❌ 单个预警发送失败: %s - %v\n", alert.Symbol, singleErr)
+			}
+		}
+	}
 }
 
 // shouldAlert 检查是否应该发送预警（防止短时间内重复预警）

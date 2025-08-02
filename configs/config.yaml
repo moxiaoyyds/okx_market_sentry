@@ -17,3 +17,7 @@ fetch:
 pushplus:
   user_token:   # PushPlus用户令牌，用于微信推送通知
   to:           # 好友令牌，给朋友发送通知。多人用逗号分隔，如: "token1,token2"
+
+network:
+  proxy:        # HTTP代理地址，如需要请填写: http://127.0.0.1:7890
+  timeout: 30s  # 网络请求超时时间

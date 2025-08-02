@@ -35,7 +35,7 @@ func main() {
 
 	// 初始化各模块
 	stateManager := storage.NewStateManager(cfg.Redis)
-	dataFetcher := fetcher.NewDataFetcher(stateManager)
+	dataFetcher := fetcher.NewDataFetcher(stateManager, cfg.Network)
 	notifyService := notifier.NewPushPlusNotifier(cfg.PushPlus.UserToken, cfg.PushPlus.To)
 	analysisEngine := analyzer.NewAnalysisEngine(stateManager, notifyService, cfg.Alert.Threshold)
 	taskScheduler := scheduler.NewScheduler(dataFetcher, analysisEngine, stateManager)

@@ -25,6 +25,7 @@ type Config struct {
 	PushPlus PushPlusConfig `mapstructure:"pushplus"`
 	Alert    AlertConfig    `mapstructure:"alert"`
 	Fetch    FetchConfig    `mapstructure:"fetch"`
+	Network  NetworkConfig  `mapstructure:"network"`
 }
 
 type RedisConfig struct {
@@ -39,7 +40,7 @@ type DingTalkConfig struct {
 
 type PushPlusConfig struct {
 	UserToken string `mapstructure:"user_token"`
-	To        string `mapstructure:"to"`  // 好友令牌，多人用逗号分隔
+	To        string `mapstructure:"to"` // 好友令牌，多人用逗号分隔
 }
 
 type AlertConfig struct {
@@ -48,4 +49,9 @@ type AlertConfig struct {
 
 type FetchConfig struct {
 	Interval time.Duration `mapstructure:"interval"`
+}
+
+type NetworkConfig struct {
+	Proxy   string        `mapstructure:"proxy"`   // HTTP代理地址，如 http://127.0.0.1:7890
+	Timeout time.Duration `mapstructure:"timeout"` // 网络超时时间
 }

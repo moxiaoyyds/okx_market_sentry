@@ -1,9 +1,12 @@
 package fetcher
 
 import (
+	"bytes"
 	"context"
+	"crypto/tls"
 	"encoding/json"
 	"fmt"
+	"net/http"
 	"net/url"
 	"strconv"
 	"strings"
@@ -11,25 +14,58 @@ import (
 
 	okxcommon "github.com/nntaoli-project/goex/v2/okx/common"
 	"okx-market-sentry/internal/storage"
+	"okx-market-sentry/pkg/types"
 )
 
 // DataFetcher 数据获取器
 type DataFetcher struct {
-	storage   *storage.StateManager
-	interval  time.Duration
-	okxClient *okxcommon.OKxV5
+	storage    *storage.StateManager
+	interval   time.Duration
+	okxClient  *okxcommon.OKxV5
+	httpClient *http.Client // 自定义HTTP客户端
 }
 
-func NewDataFetcher(stateManager *storage.StateManager) *DataFetcher {
+func NewDataFetcher(stateManager *storage.StateManager, networkConfig types.NetworkConfig) *DataFetcher {
 	// 使用goex v2 OKX客户端
 	client := okxcommon.New()
 
-	fmt.Println("✅ 初始化goex v2 OKX客户端")
+	// 设置超时时间
+	timeout := networkConfig.Timeout
+	if timeout == 0 {
+		timeout = 30 * time.Second
+	}
+
+	// 创建自定义HTTP客户端
+	httpClient := &http.Client{
+		Timeout: timeout,
+		Transport: &http.Transport{
+			TLSClientConfig: &tls.Config{
+				InsecureSkipVerify: false,
+			},
+		},
+	}
+
+	// 如果配置了代理，则使用代理
+	if networkConfig.Proxy != "" {
+		proxyURL, err := url.Parse(networkConfig.Proxy)
+		if err == nil {
+			httpClient.Transport.(*http.Transport).Proxy = http.ProxyURL(proxyURL)
+			fmt.Printf("✅ 已配置HTTP代理: %s\n", networkConfig.Proxy)
+		} else {
+			fmt.Printf("⚠️ 代理地址格式错误: %v\n", err)
+		}
+	}
+
+	// 通过反射或其他方式设置HTTP客户端（goex v2可能需要不同的方法）
+	// 暂时先创建基础客户端，后续在请求中使用自定义HTTP客户端
+
+	fmt.Printf("✅ 初始化goex v2 OKX客户端（超时: %v）\n", timeout)
 
 	return &DataFetcher{
-		storage:   stateManager,
-		interval:  1 * time.Minute,
-		okxClient: client,
+		storage:    stateManager,
+		interval:   1 * time.Minute,
+		okxClient:  client,
+		httpClient: httpClient, // 保存自定义HTTP客户端供后续使用
 	}
 }
 
@@ -92,31 +128,67 @@ type Ticker struct {
 	Ts        string `json:"ts"`
 }
 
-// getTickers 使用goex v2获取OKX所有现货交易对ticker数据
+// getTickers 使用自定义HTTP客户端直接获取OKX ticker数据（支持代理）
 func (f *DataFetcher) getTickers() ([]Ticker, error) {
-	// 使用goex v2的DoNoAuthRequest方法调用OKX tickers API
-	params := &url.Values{}
-	params.Set("instType", "SPOT")
-
-	data, responseBody, err := f.okxClient.DoNoAuthRequest("GET", f.okxClient.UriOpts.Endpoint+"/api/v5/market/tickers", params)
-	if err != nil {
-		return nil, fmt.Errorf("goex v2请求失败: %v, response: %s", err, string(responseBody))
-	}
-
-	// 解析响应数据
-	var tickers []Ticker
-	if err := json.Unmarshal(data, &tickers); err != nil {
-		return nil, fmt.Errorf("解析ticker数据失败: %v", err)
-	}
-
-	// 过滤出USDT交易对
-	usdtTickers := make([]Ticker, 0)
-	for _, ticker := range tickers {
-		if strings.HasSuffix(ticker.InstId, "-USDT") {
-			usdtTickers = append(usdtTickers, ticker)
+	// 重试机制：最多重试3次
+	var lastErr error
+	for attempt := 1; attempt <= 3; attempt++ {
+		if attempt > 1 {
+			fmt.Printf("🔄 第%d次重试获取数据...\n", attempt)
+			time.Sleep(time.Duration(attempt) * time.Second) // 指数退避
 		}
+
+		// 直接使用自定义HTTP客户端发送请求，绕过goex库的限制
+		apiURL := "https://www.okx.com/api/v5/market/tickers?instType=SPOT"
+
+		resp, err := f.httpClient.Get(apiURL)
+		if err != nil {
+			lastErr = fmt.Errorf("HTTP请求失败(第%d次尝试): %v", attempt, err)
+			continue
+		}
+		defer resp.Body.Close()
+
+		if resp.StatusCode != 200 {
+			lastErr = fmt.Errorf("HTTP状态码错误(第%d次尝试): %d", attempt, resp.StatusCode)
+			continue
+		}
+
+		// 读取响应体
+		var body bytes.Buffer
+		_, err = body.ReadFrom(resp.Body)
+		if err != nil {
+			lastErr = fmt.Errorf("读取响应失败(第%d次尝试): %v", attempt, err)
+			continue
+		}
+
+		// 解析OKX API响应格式
+		var apiResp struct {
+			Code string   `json:"code"`
+			Msg  string   `json:"msg"`
+			Data []Ticker `json:"data"`
+		}
+
+		if err := json.Unmarshal(body.Bytes(), &apiResp); err != nil {
+			lastErr = fmt.Errorf("解析API响应失败(第%d次尝试): %v", attempt, err)
+			continue
+		}
+
+		if apiResp.Code != "0" {
+			lastErr = fmt.Errorf("API返回错误(第%d次尝试): %s - %s", attempt, apiResp.Code, apiResp.Msg)
+			continue
+		}
+
+		// 过滤出USDT交易对
+		usdtTickers := make([]Ticker, 0)
+		for _, ticker := range apiResp.Data {
+			if strings.HasSuffix(ticker.InstId, "-USDT") {
+				usdtTickers = append(usdtTickers, ticker)
+			}
+		}
+
+		fmt.Printf("📊 使用代理从 %d 个交易对中筛选出 %d 个USDT交易对\n", len(apiResp.Data), len(usdtTickers))
+		return usdtTickers, nil
 	}
 
-	fmt.Printf("📊 使用goex v2从 %d 个交易对中筛选出 %d 个USDT交易对\n", len(tickers), len(usdtTickers))
-	return usdtTickers, nil
+	return nil, lastErr
 }
