@@ -52,11 +52,8 @@ make run
 
 1. **配置应用**
 ```bash
-# 复制配置文件模板
-cp configs/config.yaml configs/config.yaml
-
 # 编辑配置文件，填入你的通知配置
-nano configs/config.yaml
+vim configs/config.yaml
 ```
 
 2. **启动服务**
