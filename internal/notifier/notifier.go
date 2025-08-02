@@ -10,6 +10,7 @@ import (
 	"net/http"
 	"net/url"
 	"okx-market-sentry/pkg/types"
+	"sort"
 	"strings"
 	"time"
 	"unicode/utf8"
@@ -114,6 +115,26 @@ func (cn *ConsoleNotifier) printAlert(alert *types.AlertData) {
 }
 
 func (cn *ConsoleNotifier) printBatchAlerts(alerts []*types.AlertData) {
+	// 分离上涨和下跌的预警
+	var upAlerts []*types.AlertData
+	var downAlerts []*types.AlertData
+
+	for _, alert := range alerts {
+		if alert.ChangePercent > 0 {
+			upAlerts = append(upAlerts, alert)
+		} else {
+			downAlerts = append(downAlerts, alert)
+		}
+	}
+
+	// 按涨跌幅排序：上涨按涨幅从高到低，下跌按跌幅从高到低（绝对值）
+	sort.Slice(upAlerts, func(i, j int) bool {
+		return upAlerts[i].ChangePercent > upAlerts[j].ChangePercent
+	})
+	sort.Slice(downAlerts, func(i, j int) bool {
+		return downAlerts[i].ChangePercent < downAlerts[j].ChangePercent // 负数，越小跌幅越大
+	})
+
 	// 创建批量预警的漂亮输出
 	border := "╔" + strings.Repeat("═", 80) + "╗"
 	bottomBorder := "╚" + strings.Repeat("═", 80) + "╝"
@@ -125,25 +146,48 @@ func (cn *ConsoleNotifier) printBatchAlerts(alerts []*types.AlertData) {
 	title := fmt.Sprintf("🚨 批量价格预警触发！- %d个币种", len(alerts))
 	padding := safePadding(title, 80)
 	fmt.Printf("║ %s%s ║\n", title, strings.Repeat(" ", padding))
+
+	// 统计信息
+	statsStr := fmt.Sprintf("📈 上涨: %d个  📉 下跌: %d个", len(upAlerts), len(downAlerts))
+	padding = safePadding(statsStr, 80)
+	fmt.Printf("║ %s%s ║\n", statsStr, strings.Repeat(" ", padding))
 	fmt.Println("║" + strings.Repeat(" ", 80) + "║")
 
-	// 显示预警列表
-	for i, alert := range alerts {
-		arrow := "📈"
-		if alert.ChangePercent < 0 {
-			arrow = "📉"
+	// 显示上涨币种
+	if len(upAlerts) > 0 {
+		sectionTitle := "📈 上涨币种 (按涨幅排序):"
+		padding = safePadding(sectionTitle, 80)
+		fmt.Printf("║ %s%s ║\n", sectionTitle, strings.Repeat(" ", padding))
+
+		for i, alert := range upAlerts {
+			changeStr := fmt.Sprintf("+%.2f%%", alert.ChangePercent)
+			content := fmt.Sprintf("  %d. 📈 %s: $%.6f (%s)",
+				i+1, alert.Symbol, alert.CurrentPrice, changeStr)
+
+			// 使用安全的填充计算
+			padding := safePadding(content, 80)
+			fmt.Printf("║ %s%s ║\n", content, strings.Repeat(" ", padding))
 		}
-
-		changeStr := fmt.Sprintf("%+.2f%%", alert.ChangePercent)
-		content := fmt.Sprintf("%d. %s %s: $%.6f (%s)",
-			i+1, arrow, alert.Symbol, alert.CurrentPrice, changeStr)
-
-		// 使用安全的填充计算
-		padding := safePadding(content, 80)
-		fmt.Printf("║ %s%s ║\n", content, strings.Repeat(" ", padding))
+		fmt.Println("║" + strings.Repeat(" ", 80) + "║")
 	}
 
-	fmt.Println("║" + strings.Repeat(" ", 80) + "║")
+	// 显示下跌币种
+	if len(downAlerts) > 0 {
+		sectionTitle := "📉 下跌币种 (按跌幅排序):"
+		padding = safePadding(sectionTitle, 80)
+		fmt.Printf("║ %s%s ║\n", sectionTitle, strings.Repeat(" ", padding))
+
+		for i, alert := range downAlerts {
+			changeStr := fmt.Sprintf("%.2f%%", alert.ChangePercent)
+			content := fmt.Sprintf("  %d. 📉 %s: $%.6f (%s)",
+				i+1, alert.Symbol, alert.CurrentPrice, changeStr)
+
+			// 使用安全的填充计算
+			padding := safePadding(content, 80)
+			fmt.Printf("║ %s%s ║\n", content, strings.Repeat(" ", padding))
+		}
+		fmt.Println("║" + strings.Repeat(" ", 80) + "║")
+	}
 
 	// 预警时间
 	timeStr := fmt.Sprintf("预警时间: %s", alerts[0].AlertTime.Format("2006-01-02 15:04:05"))
@@ -348,16 +392,25 @@ func (ppn *PushPlusNotifier) buildBatchHTMLContent(alerts []*types.AlertData) st
 		return ""
 	}
 
-	// 统计涨跌情况
-	upCount := 0
-	downCount := 0
+	// 分离上涨和下跌的预警
+	var upAlerts []*types.AlertData
+	var downAlerts []*types.AlertData
+
 	for _, alert := range alerts {
 		if alert.ChangePercent > 0 {
-			upCount++
+			upAlerts = append(upAlerts, alert)
 		} else {
-			downCount++
+			downAlerts = append(downAlerts, alert)
 		}
 	}
+
+	// 按涨跌幅排序：上涨按涨幅从高到低，下跌按跌幅从高到低（绝对值）
+	sort.Slice(upAlerts, func(i, j int) bool {
+		return upAlerts[i].ChangePercent > upAlerts[j].ChangePercent
+	})
+	sort.Slice(downAlerts, func(i, j int) bool {
+		return downAlerts[i].ChangePercent < downAlerts[j].ChangePercent // 负数，越小跌幅越大
+	})
 
 	// 构建HTML格式的批量消息内容
 	content := fmt.Sprintf(`
@@ -369,40 +422,92 @@ func (ppn *PushPlusNotifier) buildBatchHTMLContent(alerts []*types.AlertData) st
         <p style="margin: 5px 0;">📈 上涨币种: <span style="color: #00C851; font-weight: bold;">%d个</span></p>
         <p style="margin: 5px 0;">📉 下跌币种: <span style="color: #FF4444; font-weight: bold;">%d个</span></p>
         <p style="margin: 5px 0;">🕐 预警时间: <span style="color: #666;">%s</span></p>
-    </div>
-    
-    <div style="background-color: white; padding: 15px; border-radius: 8px; margin: 10px 0; max-height: 400px; overflow-y: auto;">
-        <h3 style="color: #333; margin-top: 0;">详细列表:</h3>
-        <table style="width: 100%%; border-collapse: collapse;">
-            <tr style="background-color: #f0f0f0;">
+    </div>`,
+		len(upAlerts), len(downAlerts), alerts[0].AlertTime.Format("2006-01-02 15:04:05"))
+
+	// 显示上涨币种
+	if len(upAlerts) > 0 {
+		content += `
+    <div style="background-color: white; padding: 15px; border-radius: 8px; margin: 10px 0;">
+        <h3 style="color: #00C851; margin-top: 0;">📈 上涨币种 (按涨幅排序):</h3>
+        <table style="width: 100%; border-collapse: collapse;">
+            <tr style="background-color: #E8F5E8;">
                 <th style="padding: 8px; text-align: left; border-bottom: 1px solid #ddd;">币种</th>
                 <th style="padding: 8px; text-align: right; border-bottom: 1px solid #ddd;">当前价格</th>
-                <th style="padding: 8px; text-align: right; border-bottom: 1px solid #ddd;">涨跌幅</th>
-            </tr>`,
-		upCount, downCount, alerts[0].AlertTime.Format("2006-01-02 15:04:05"))
+                <th style="padding: 8px; text-align: right; border-bottom: 1px solid #ddd;">涨幅</th>
+            </tr>`
 
-	// 添加每个预警的详细信息
-	for _, alert := range alerts {
-		arrow := "📈"
-		color := "#00C851"
-		if alert.ChangePercent < 0 {
-			arrow = "📉"
-			color = "#FF4444"
+		maxShow := 10 // 每个分组最多显示10个
+		showCount := len(upAlerts)
+		if showCount > maxShow {
+			showCount = maxShow
 		}
 
-		content += fmt.Sprintf(`
+		for i := 0; i < showCount; i++ {
+			alert := upAlerts[i]
+			content += fmt.Sprintf(`
             <tr>
-                <td style="padding: 8px; border-bottom: 1px solid #eee;">%s %s</td>
+                <td style="padding: 8px; border-bottom: 1px solid #eee;">📈 %s</td>
                 <td style="padding: 8px; text-align: right; border-bottom: 1px solid #eee;">$%.6f</td>
-                <td style="padding: 8px; text-align: right; border-bottom: 1px solid #eee; color: %s; font-weight: bold;">%+.2f%%</td>
+                <td style="padding: 8px; text-align: right; border-bottom: 1px solid #eee; color: #00C851; font-weight: bold;">+%.2f%%</td>
             </tr>`,
-			arrow, alert.Symbol, alert.CurrentPrice, color, alert.ChangePercent)
+				alert.Symbol, alert.CurrentPrice, alert.ChangePercent)
+		}
+
+		if len(upAlerts) > maxShow {
+			content += fmt.Sprintf(`
+            <tr>
+                <td colspan="3" style="padding: 8px; text-align: center; color: #666; font-style: italic;">... 还有%d个上涨币种</td>
+            </tr>`, len(upAlerts)-maxShow)
+		}
+
+		content += `
+        </table>
+    </div>`
+	}
+
+	// 显示下跌币种
+	if len(downAlerts) > 0 {
+		content += `
+    <div style="background-color: white; padding: 15px; border-radius: 8px; margin: 10px 0;">
+        <h3 style="color: #FF4444; margin-top: 0;">📉 下跌币种 (按跌幅排序):</h3>
+        <table style="width: 100%; border-collapse: collapse;">
+            <tr style="background-color: #FFE8E8;">
+                <th style="padding: 8px; text-align: left; border-bottom: 1px solid #ddd;">币种</th>
+                <th style="padding: 8px; text-align: right; border-bottom: 1px solid #ddd;">当前价格</th>
+                <th style="padding: 8px; text-align: right; border-bottom: 1px solid #ddd;">跌幅</th>
+            </tr>`
+
+		maxShow := 10 // 每个分组最多显示10个
+		showCount := len(downAlerts)
+		if showCount > maxShow {
+			showCount = maxShow
+		}
+
+		for i := 0; i < showCount; i++ {
+			alert := downAlerts[i]
+			content += fmt.Sprintf(`
+            <tr>
+                <td style="padding: 8px; border-bottom: 1px solid #eee;">📉 %s</td>
+                <td style="padding: 8px; text-align: right; border-bottom: 1px solid #eee;">$%.6f</td>
+                <td style="padding: 8px; text-align: right; border-bottom: 1px solid #eee; color: #FF4444; font-weight: bold;">%.2f%%</td>
+            </tr>`,
+				alert.Symbol, alert.CurrentPrice, alert.ChangePercent)
+		}
+
+		if len(downAlerts) > maxShow {
+			content += fmt.Sprintf(`
+            <tr>
+                <td colspan="3" style="padding: 8px; text-align: center; color: #666; font-style: italic;">... 还有%d个下跌币种</td>
+            </tr>`, len(downAlerts)-maxShow)
+		}
+
+		content += `
+        </table>
+    </div>`
 	}
 
 	content += `
-        </table>
-    </div>
-    
     <div style="background-color: #FF6B6B; color: white; padding: 15px; border-radius: 8px; text-align: center; margin-top: 15px;">
         <strong>⚠️ 多个交易对同时出现显著波动，请密切关注市场动向！</strong>
     </div>
@@ -596,16 +701,25 @@ func (dtn *DingTalkNotifier) buildMarkdownContent(alert *types.AlertData) string
 
 // buildBatchMarkdownContent 构建批量预警的Markdown内容
 func (dtn *DingTalkNotifier) buildBatchMarkdownContent(alerts []*types.AlertData) string {
-	// 统计涨跌情况
-	upCount := 0
-	downCount := 0
+	// 分离上涨和下跌的预警
+	var upAlerts []*types.AlertData
+	var downAlerts []*types.AlertData
+
 	for _, alert := range alerts {
 		if alert.ChangePercent > 0 {
-			upCount++
+			upAlerts = append(upAlerts, alert)
 		} else {
-			downCount++
+			downAlerts = append(downAlerts, alert)
 		}
 	}
+
+	// 按涨跌幅排序：上涨按涨幅从高到低，下跌按跌幅从高到低（绝对值）
+	sort.Slice(upAlerts, func(i, j int) bool {
+		return upAlerts[i].ChangePercent > upAlerts[j].ChangePercent
+	})
+	sort.Slice(downAlerts, func(i, j int) bool {
+		return downAlerts[i].ChangePercent < downAlerts[j].ChangePercent // 负数，越小跌幅越大
+	})
 
 	content := fmt.Sprintf(`## 🚨 批量价格预警触发
 
@@ -615,35 +729,50 @@ func (dtn *DingTalkNotifier) buildBatchMarkdownContent(alerts []*types.AlertData
 🕐 预警时间: %s  
 
 **详细列表**:  
-`, upCount, downCount, alerts[0].AlertTime.Format("2006-01-02 15:04:05"))
+`, len(upAlerts), len(downAlerts), alerts[0].AlertTime.Format("2006-01-02 15:04:05"))
 
-	// 只显示前10个，避免消息过长
-	maxShow := 10
-	if len(alerts) > maxShow {
-		content += fmt.Sprintf("显示前%d个（共%d个）:\n", maxShow, len(alerts))
-	}
-
-	for i, alert := range alerts {
-		if i >= maxShow {
-			break
+	// 显示上涨部分
+	if len(upAlerts) > 0 {
+		content += "**📈 上涨币种**:\n"
+		maxShow := 8 // 每个分组最多显示8个
+		showCount := len(upAlerts)
+		if showCount > maxShow {
+			showCount = maxShow
 		}
 
-		arrow := "📈"
-		color := "green"
-		if alert.ChangePercent < 0 {
-			arrow = "📉"
-			color = "red"
+		for i := 0; i < showCount; i++ {
+			alert := upAlerts[i]
+			content += fmt.Sprintf("- 📈 **%s**: $%.6f (<font color=\"green\">+%.2f%%</font>)\n",
+				alert.Symbol, alert.CurrentPrice, alert.ChangePercent)
 		}
 
-		content += fmt.Sprintf("- %s **%s**: $%.6f (<font color=\"%s\">%+.2f%%</font>)\n",
-			arrow, alert.Symbol, alert.CurrentPrice, color, alert.ChangePercent)
+		if len(upAlerts) > maxShow {
+			content += fmt.Sprintf("- ... 还有%d个上涨币种\n", len(upAlerts)-maxShow)
+		}
+		content += "\n"
 	}
 
-	if len(alerts) > maxShow {
-		content += fmt.Sprintf("\n... 还有%d个币种预警，请查看详细日志", len(alerts)-maxShow)
+	// 显示下跌部分
+	if len(downAlerts) > 0 {
+		content += "**📉 下跌币种**:\n"
+		maxShow := 8 // 每个分组最多显示8个
+		showCount := len(downAlerts)
+		if showCount > maxShow {
+			showCount = maxShow
+		}
+
+		for i := 0; i < showCount; i++ {
+			alert := downAlerts[i]
+			content += fmt.Sprintf("- 📉 **%s**: $%.6f (<font color=\"red\">%.2f%%</font>)\n",
+				alert.Symbol, alert.CurrentPrice, alert.ChangePercent)
+		}
+
+		if len(downAlerts) > maxShow {
+			content += fmt.Sprintf("- ... 还有%d个下跌币种\n", len(downAlerts)-maxShow)
+		}
 	}
 
-	content += "\n\n> ⚠️ 多个交易对同时出现显著波动，请密切关注市场动向！"
+	content += "\n> ⚠️ 多个交易对同时出现显著波动，请密切关注市场动向！"
 
 	return content
 }
