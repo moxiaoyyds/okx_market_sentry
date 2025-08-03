@@ -3,12 +3,12 @@ version: '3'
 services:
   okx-sentry:
     build: .
-    container_name: okx-market-sentry
+    container_name: okx
     restart: unless-stopped
-    environment:
-      - REDIS_URL=redis:6379
     depends_on:
-      - redis
+      # 更新 depends_on，等待 redis 服务进入健康状态
+      redis:
+        condition: service_healthy
     volumes:
       - ./configs:/root/configs
       - ./logs:/root/logs
@@ -22,6 +22,12 @@ services:
     volumes:
       - redis_data:/data
     command: redis-server --appendonly yes
+    # 新增 healthcheck 部分
+    healthcheck:
+      test: ["CMD", "redis-cli", "--raw", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
     networks:
       - okx-network
 
