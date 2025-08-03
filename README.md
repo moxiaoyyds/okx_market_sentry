@@ -179,12 +179,12 @@ pushplus:
 详细列表:
 
 📈 上涨币种 (按涨幅排序):
-- 📈 ETH-USDT: $2841.50 (+4.12%)
-- 📈 BTC-USDT: $95432.10 (+3.35%)
+- 📈 [ETH-USDT](https://www.bybits.io/trade/usdt/ETHUSDT): $2841.50 (+4.12%)
+- 📈 [BTC-USDT](https://www.bybits.io/trade/usdt/BTCUSDT): $95432.10 (+3.35%)
 
 📉 下跌币种 (按跌幅排序):
-- 📉 SOL-USDT: $198.20 (-3.67%)
-- 📉 ADA-USDT: $0.8241 (-3.24%)
+- 📉 [SOL-USDT](https://www.bybits.io/trade/usdt/SOLUSDT): $198.20 (-3.67%)
+- 📉 [ADA-USDT](https://www.bybits.io/trade/usdt/ADAUSDT): $0.8241 (-3.24%)
 
 ⚠️ 多个交易对同时出现显著波动，请密切关注市场动向！
 ```

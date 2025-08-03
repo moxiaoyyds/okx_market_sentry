@@ -40,6 +40,13 @@ func formatDuration(d time.Duration) string {
 	}
 }
 
+// buildTradingURL 根据交易对生成交易链接
+func buildTradingURL(symbol string) string {
+	// 将 BTC-USDT 格式转换为 BTCUSDT 格式
+	pair := strings.ReplaceAll(symbol, "-", "")
+	return fmt.Sprintf("https://www.bybits.io/trade/usdt/%s", pair)
+}
+
 // Interface 通知接口
 type Interface interface {
 	SendAlert(alert *types.AlertData) error
@@ -318,12 +325,13 @@ func (ppn *PushPlusNotifier) buildHTMLContent(alert *types.AlertData) string {
 	}
 
 	// 构建HTML格式的消息内容
+	tradingURL := buildTradingURL(alert.Symbol)
 	content := fmt.Sprintf(`
 <div style="border: 2px solid %s; border-radius: 10px; padding: 20px; margin: 10px; background-color: #f9f9f9;">
     <h2 style="color: %s; text-align: center; margin-top: 0;">%s 价格预警触发</h2>
     
     <div style="background-color: white; padding: 15px; border-radius: 8px; margin: 10px 0;">
-        <p><strong>交易对:</strong> <span style="font-size: 18px; color: #333;">%s</span></p>
+        <p><strong>交易对:</strong> <a href="%s" style="font-size: 18px; color: #1890ff; text-decoration: none;" target="_blank">%s 🔗</a></p>
         <p><strong>当前价格:</strong> <span style="font-size: 16px; color: #333;">$%.6f</span></p>
         <p><strong>%s前价格:</strong> <span style="font-size: 16px; color: #333;">$%.6f</span></p>
         <p><strong>价格变化:</strong> <span style="font-size: 18px; font-weight: bold; color: %s;">%+.2f%%</span></p>
@@ -336,7 +344,7 @@ func (ppn *PushPlusNotifier) buildHTMLContent(alert *types.AlertData) string {
 </div>
 `,
 		color, color, arrow,
-		alert.Symbol,
+		tradingURL, alert.Symbol,
 		alert.CurrentPrice,
 		formatDuration(alert.MonitorPeriod), alert.PastPrice,
 		color, alert.ChangePercent,
@@ -445,13 +453,14 @@ func (ppn *PushPlusNotifier) buildBatchHTMLContent(alerts []*types.AlertData) st
 
 		for i := 0; i < showCount; i++ {
 			alert := upAlerts[i]
+			tradingURL := buildTradingURL(alert.Symbol)
 			content += fmt.Sprintf(`
             <tr>
-                <td style="padding: 8px; border-bottom: 1px solid #eee;">📈 %s</td>
+                <td style="padding: 8px; border-bottom: 1px solid #eee;">📈 <a href="%s" style="color: #00C851; text-decoration: none;" target="_blank">%s 🔗</a></td>
                 <td style="padding: 8px; text-align: right; border-bottom: 1px solid #eee;">$%.6f</td>
                 <td style="padding: 8px; text-align: right; border-bottom: 1px solid #eee; color: #00C851; font-weight: bold;">+%.2f%%</td>
             </tr>`,
-				alert.Symbol, alert.CurrentPrice, alert.ChangePercent)
+				tradingURL, alert.Symbol, alert.CurrentPrice, alert.ChangePercent)
 		}
 
 		if len(upAlerts) > maxShow {
@@ -486,13 +495,14 @@ func (ppn *PushPlusNotifier) buildBatchHTMLContent(alerts []*types.AlertData) st
 
 		for i := 0; i < showCount; i++ {
 			alert := downAlerts[i]
+			tradingURL := buildTradingURL(alert.Symbol)
 			content += fmt.Sprintf(`
             <tr>
-                <td style="padding: 8px; border-bottom: 1px solid #eee;">📉 %s</td>
+                <td style="padding: 8px; border-bottom: 1px solid #eee;">📉 <a href="%s" style="color: #FF4444; text-decoration: none;" target="_blank">%s 🔗</a></td>
                 <td style="padding: 8px; text-align: right; border-bottom: 1px solid #eee;">$%.6f</td>
                 <td style="padding: 8px; text-align: right; border-bottom: 1px solid #eee; color: #FF4444; font-weight: bold;">%.2f%%</td>
             </tr>`,
-				alert.Symbol, alert.CurrentPrice, alert.ChangePercent)
+				tradingURL, alert.Symbol, alert.CurrentPrice, alert.ChangePercent)
 		}
 
 		if len(downAlerts) > maxShow {
@@ -679,9 +689,12 @@ func (dtn *DingTalkNotifier) buildMarkdownContent(alert *types.AlertData) string
 		changeText = "下跌"
 	}
 
+	// 生成交易链接
+	tradingURL := buildTradingURL(alert.Symbol)
+
 	content := fmt.Sprintf(`## %s 价格预警触发
 
-**交易对**: %s  
+**交易对**: [%s](%s)  
 **当前价格**: $%.6f  
 **%s前价格**: $%.6f  
 **价格变化**: <font color="%s">%+.2f%%</font>  
@@ -689,7 +702,7 @@ func (dtn *DingTalkNotifier) buildMarkdownContent(alert *types.AlertData) string
 
 > %s 该交易对出现显著%s，请关注市场动向！`,
 		arrow,
-		alert.Symbol,
+		alert.Symbol, tradingURL,
 		alert.CurrentPrice,
 		formatDuration(alert.MonitorPeriod), alert.PastPrice,
 		color, alert.ChangePercent,
@@ -742,8 +755,9 @@ func (dtn *DingTalkNotifier) buildBatchMarkdownContent(alerts []*types.AlertData
 
 		for i := 0; i < showCount; i++ {
 			alert := upAlerts[i]
-			content += fmt.Sprintf("- 📈 **%s**: $%.6f (<font color=\"green\">+%.2f%%</font>)\n",
-				alert.Symbol, alert.CurrentPrice, alert.ChangePercent)
+			tradingURL := buildTradingURL(alert.Symbol)
+			content += fmt.Sprintf("- 📈 **[%s](%s)**: $%.6f (<font color=\"green\">+%.2f%%</font>)\n",
+				alert.Symbol, tradingURL, alert.CurrentPrice, alert.ChangePercent)
 		}
 
 		if len(upAlerts) > maxShow {
@@ -763,8 +777,9 @@ func (dtn *DingTalkNotifier) buildBatchMarkdownContent(alerts []*types.AlertData
 
 		for i := 0; i < showCount; i++ {
 			alert := downAlerts[i]
-			content += fmt.Sprintf("- 📉 **%s**: $%.6f (<font color=\"red\">%.2f%%</font>)\n",
-				alert.Symbol, alert.CurrentPrice, alert.ChangePercent)
+			tradingURL := buildTradingURL(alert.Symbol)
+			content += fmt.Sprintf("- 📉 **[%s](%s)**: $%.6f (<font color=\"red\">%.2f%%</font>)\n",
+				alert.Symbol, tradingURL, alert.CurrentPrice, alert.ChangePercent)
 		}
 
 		if len(downAlerts) > maxShow {
