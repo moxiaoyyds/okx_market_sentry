@@ -56,19 +56,19 @@ vim configs/config.yaml
 2. **启动服务**
 ```bash
 # 启动 OKX Market Sentry + Redis
-docker-compose up -d
+docker compose up -d
 
 # 查看运行状态
-docker-compose ps
+docker compose ps
 ```
 
 3. **查看日志**
 ```bash
 # 查看实时日志
-docker-compose logs -f okx-sentry
+docker compose logs -f okx-sentry
 
 # 查看特定服务日志
-docker-compose logs -f redis
+docker compose logs -f okx-redis
 ```
 
 ## ⚙️ 配置详解

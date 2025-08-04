@@ -11,7 +11,7 @@ services:
         condition: service_healthy
     volumes:
       - ./configs:/root/configs
-      - ./logs:/root/logs
+      - ./log:/root/log
     networks:
       - okx-network
 
