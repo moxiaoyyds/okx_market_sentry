@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/go-redis/redis/v8"
+	"go.uber.org/zap"
 	"okx-market-sentry/pkg/types"
 )
 
@@ -133,14 +134,14 @@ func NewStateManager(redisConfig types.RedisConfig, monitorPeriod time.Duration)
 
 		_, err := sm.redisClient.Ping(ctx).Result()
 		if err != nil {
-			fmt.Printf("⚠️  Redis连接失败，使用纯内存模式: %v\n", err)
+			zap.L().Warn("⚠️  Redis连接失败，使用纯内存模式", zap.Error(err))
 			sm.useRedis = false
 		} else {
-			fmt.Println("✅ Redis连接成功")
+			zap.L().Info("✅ Redis连接成功")
 			sm.useRedis = true
 		}
 	} else {
-		fmt.Println("🔧 未配置Redis，使用纯内存模式")
+		zap.L().Info("🔧 未配置Redis，使用纯内存模式")
 		sm.useRedis = false
 	}
 
@@ -181,7 +182,7 @@ func (sm *StateManager) backupToRedis(symbol string, point types.PriceDataPoint)
 	key := fmt.Sprintf("okx:price:%s", symbol)
 	value, err := json.Marshal(point)
 	if err != nil {
-		fmt.Printf("序列化价格数据失败: %v\n", err)
+		zap.L().Error("序列化价格数据失败", zap.Error(err))
 		return
 	}
 
@@ -192,7 +193,9 @@ func (sm *StateManager) backupToRedis(symbol string, point types.PriceDataPoint)
 	}).Err()
 
 	if err != nil {
-		fmt.Printf("Redis存储失败 %s: %v\n", symbol, err)
+		zap.L().Error("Redis存储失败",
+			zap.String("symbol", symbol),
+			zap.Error(err))
 		return
 	}
 

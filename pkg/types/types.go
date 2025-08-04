@@ -20,13 +20,23 @@ type AlertData struct {
 
 // Config 配置结构
 type Config struct {
-	LogLevel string         `mapstructure:"log_level"`
+	LogLevel string         `mapstructure:"log_level"` // 兼容保留
+	Log      LogConfig      `mapstructure:"log"`
 	Redis    RedisConfig    `mapstructure:"redis"`
 	DingTalk DingTalkConfig `mapstructure:"dingtalk"`
 	PushPlus PushPlusConfig `mapstructure:"pushplus"`
 	Alert    AlertConfig    `mapstructure:"alert"`
 	Fetch    FetchConfig    `mapstructure:"fetch"`
 	Network  NetworkConfig  `mapstructure:"network"`
+}
+
+type LogConfig struct {
+	Level      string `mapstructure:"level"`       // 日志级别
+	FilePath   string `mapstructure:"file_path"`   // 日志输出路径名
+	MaxSize    int    `mapstructure:"max_size"`    // 日志文件大小 单位：MB，超限后会自动切割
+	MaxAge     int    `mapstructure:"max_age"`     // 日志文件存放时间 单位：天
+	MaxBackups int    `mapstructure:"max_backups"` // 日志文件备份数量
+	Compress   bool   `mapstructure:"compress"`    // 日志文件压缩
 }
 
 type RedisConfig struct {

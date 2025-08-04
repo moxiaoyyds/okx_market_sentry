@@ -9,6 +9,7 @@ import (
 	"syscall"
 	"time"
 
+	"go.uber.org/zap"
 	"okx-market-sentry/internal/analyzer"
 	"okx-market-sentry/internal/fetcher"
 	"okx-market-sentry/internal/notifier"
@@ -25,9 +26,9 @@ func main() {
 		log.Fatal("加载配置失败:", err)
 	}
 
-	// 初始化日志
-	appLogger := logger.New(cfg.LogLevel)
-	appLogger.Info("OKX Market Sentry 启动中...")
+	// 初始化zap日志系统
+	logger.InitLogger(cfg.Log)
+	zap.L().Info("OKX Market Sentry 启动中...")
 
 	// 创建上下文
 	ctx, cancel := context.WithCancel(context.Background())
@@ -63,10 +64,10 @@ func main() {
 	sigCh := make(chan os.Signal, 1)
 	signal.Notify(sigCh, syscall.SIGINT, syscall.SIGTERM)
 
-	appLogger.Info("OKX Market Sentry 已启动")
+	zap.L().Info("OKX Market Sentry 已启动")
 	<-sigCh
 
-	appLogger.Info("收到停止信号，正在优雅关闭...")
+	zap.L().Info("收到停止信号，正在优雅关闭...")
 	cancel()
 
 	// 等待所有goroutine结束，最多等待30秒
@@ -78,8 +79,8 @@ func main() {
 
 	select {
 	case <-done:
-		appLogger.Info("OKX Market Sentry 已安全关闭")
+		zap.L().Info("OKX Market Sentry 已安全关闭")
 	case <-time.After(30 * time.Second):
-		appLogger.Warn("强制关闭超时")
+		zap.L().Warn("强制关闭超时")
 	}
 }

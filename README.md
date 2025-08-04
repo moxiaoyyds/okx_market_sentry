@@ -76,7 +76,14 @@ docker-compose logs -f redis
 ### 基础配置 (config.yaml)
 
 ```yaml
-log_level: info
+# 日志配置
+log:
+  level: info                    # 日志级别 (debug, info, warn, error)
+  file_path: logs               # 日志文件存放目录
+  max_size: 200                 # 日志文件大小限制 (MB)
+  max_age: 30                   # 日志文件保留天数
+  max_backups: 7                # 日志文件备份数量
+  compress: false               # 是否压缩日志文件
 
 redis:
   url: localhost:6379        # Redis 连接地址

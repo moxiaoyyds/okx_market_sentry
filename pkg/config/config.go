@@ -42,7 +42,13 @@ func Load() (*types.Config, error) {
 }
 
 func setDefaults() {
-	viper.SetDefault("log_level", "info")
+	viper.SetDefault("log_level", "info") // 兼容保留
+	viper.SetDefault("log.level", "info")
+	viper.SetDefault("log.file_path", "logs")
+	viper.SetDefault("log.max_size", 200)
+	viper.SetDefault("log.max_age", 30)
+	viper.SetDefault("log.max_backups", 7)
+	viper.SetDefault("log.compress", false)
 	viper.SetDefault("redis.url", "localhost:6379")
 	viper.SetDefault("redis.password", "")
 	viper.SetDefault("redis.db", 0)

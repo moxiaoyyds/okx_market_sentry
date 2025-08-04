@@ -1,4 +1,16 @@
-log_level: info
+#log_level: info
+
+log:
+  level: debug # 日志级别 (debug, info, warn, error)
+  file_path: log # 日志输出路径名
+  # 日志文件大小 单位：MB，超限后会自动切割
+  max_size: 200
+  # 日志文件存放时间 单位：天
+  max_age: 30
+  # 日志文件备份数量
+  max_backups: 7
+  # 日志文件压缩
+  compress: false
 
 redis:
   url: redis:6379

@@ -13,6 +13,8 @@ import (
 	"time"
 
 	okxcommon "github.com/nntaoli-project/goex/v2/okx/common"
+	"go.uber.org/zap"
+	"okx-market-sentr
 	"okx-market-sentry/internal/storage"
 	"okx-market-sentry/pkg/types"
 )
@@ -50,16 +52,16 @@ func NewDataFetcher(stateManager *storage.StateManager, networkConfig types.Netw
 		proxyURL, err := url.Parse(networkConfig.Proxy)
 		if err == nil {
 			httpClient.Transport.(*http.Transport).Proxy = http.ProxyURL(proxyURL)
-			fmt.Printf("✅ 已配置HTTP代理: %s\n", networkConfig.Proxy)
+			zap.L().Info("✅ 已配置HTTP代理", zap.String("proxy", networkConfig.Proxy))
 		} else {
-			fmt.Printf("⚠️ 代理地址格式错误: %v\n", err)
+			zap.L().Warn("⚠️ 代理地址格式错误", zap.Error(err))
 		}
 	}
 
 	// 通过反射或其他方式设置HTTP客户端（goex v2可能需要不同的方法）
 	// 暂时先创建基础客户端，后续在请求中使用自定义HTTP客户端
 
-	fmt.Printf("✅ 初始化goex v2 OKX客户端（超时: %v）\n", timeout)
+	zap.L().Info("✅ 初始化goex v2 OKX客户端", zap.Duration("timeout", timeout))
 
 	return &DataFetcher{
 		storage:    stateManager,
@@ -70,7 +72,7 @@ func NewDataFetcher(stateManager *storage.StateManager, networkConfig types.Netw
 }
 
 func (f *DataFetcher) Start(ctx context.Context) {
-	fmt.Println("🚀 数据获取器启动，开始获取OKX V5真实市场数据...")
+	zap.L().Info("🚀 数据获取器启动，开始获取OKX V5真实市场数据...")
 
 	ticker := time.NewTicker(f.interval)
 	defer ticker.Stop()
@@ -81,7 +83,7 @@ func (f *DataFetcher) Start(ctx context.Context) {
 	for {
 		select {
 		case <-ctx.Done():
-			fmt.Println("📴 数据获取器已停止")
+			zap.L().Info("📴 数据获取器已停止")
 			return
 		case <-ticker.C:
 			f.fetchAndStore()
@@ -89,13 +91,14 @@ func (f *DataFetcher) Start(ctx context.Context) {
 	}
 }
 
-func (f *DataFetcher) fetchAndStore() {
-	fmt.Printf("🔄 正在使用goex v2获取OKX市场数据... [%s]\n", time.Now().Format("15:04:05"))
+	zap.L().Info("🔄 正在使用goex v2获取OKX市场数据...",
+	zap.L().Info("🔄 正在使用goex v2获取OKX市场数据...", 
+		zap.String("time", time.Now().Format("15:04:05")))
 
 	// 获取所有现货交易对的ticker数据
 	tickers, err := f.getTickers()
 	if err != nil {
-		fmt.Printf("❌ 获取市场数据失败: %v\n", err)
+		zap.L().Error("❌ 获取市场数据失败", zap.Error(err))
 		return
 	}
 
@@ -112,8 +115,10 @@ func (f *DataFetcher) fetchAndStore() {
 			}
 		}
 	}
-
-	fmt.Printf("✅ 获取到 %d 个交易对，其中 %d 个USDT交易对已存储\n", count, usdtCount)
+	zap.L().Info("✅ 获取到交易对数据",
+	zap.L().Info("✅ 获取到交易对数据", 
+		zap.Int("total_count", count),
+		zap.Int("usdt_count", usdtCount))
 }
 
 // Ticker 定义ticker响应结构
@@ -134,7 +139,7 @@ func (f *DataFetcher) getTickers() ([]Ticker, error) {
 	var lastErr error
 	for attempt := 1; attempt <= 3; attempt++ {
 		if attempt > 1 {
-			fmt.Printf("🔄 第%d次重试获取数据...\n", attempt)
+			zap.L().Info("🔄 重试获取数据", zap.Int("attempt", attempt))
 			time.Sleep(time.Duration(attempt) * time.Second) // 指数退避
 		}
 
@@ -185,8 +190,10 @@ func (f *DataFetcher) getTickers() ([]Ticker, error) {
 				usdtTickers = append(usdtTickers, ticker)
 			}
 		}
-
-		fmt.Printf("📊 使用代理从 %d 个交易对中筛选出 %d 个USDT交易对\n", len(apiResp.Data), len(usdtTickers))
+		zap.L().Info("📊 使用代理从交易对中筛选出USDT交易对",
+		zap.L().Info("📊 使用代理从交易对中筛选出USDT交易对", 
+			zap.Int("total_pairs", len(apiResp.Data)),
+			zap.Int("usdt_pairs", len(usdtTickers)))
 		return usdtTickers, nil
 	}
 

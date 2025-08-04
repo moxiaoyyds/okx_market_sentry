@@ -2,9 +2,9 @@ package scheduler
 
 import (
 	"context"
-	"fmt"
 	"time"
 
+	"go.uber.org/zap"
 	"okx-market-sentry/internal/analyzer"
 	"okx-market-sentry/internal/fetcher"
 	"okx-market-sentry/internal/storage"
@@ -32,7 +32,7 @@ func NewScheduler(dataFetcher *fetcher.DataFetcher, analysisEngine *analyzer.Ana
 }
 
 func (s *Scheduler) Start(ctx context.Context) {
-	fmt.Println("🚀 调度器启动中...")
+	zap.L().Info("🚀 调度器启动中...")
 
 	// 启动数据获取器
 	go s.dataFetcher.Start(ctx)
@@ -41,15 +41,16 @@ func (s *Scheduler) Start(ctx context.Context) {
 	nextKlineTime := s.calculateNextKlineTime()
 	waitDuration := time.Until(nextKlineTime)
 
-	fmt.Printf("⏳ 等待同步到下一个K线时间点 %s（等待 %v）...\n",
-		nextKlineTime.Format("15:04:05"), waitDuration)
+	zap.L().Info("⏳ 等待同步到下一个K线时间点",
+		zap.String("next_time", nextKlineTime.Format("15:04:05")),
+		zap.Duration("wait_duration", waitDuration))
 
 	select {
 	case <-ctx.Done():
 		return
 	case <-time.After(waitDuration):
-		fmt.Printf("✅ 已同步到K线时间 %s，开始价格分析和预警监控\n",
-			time.Now().Format("15:04:05"))
+		zap.L().Info("✅ 已同步到K线时间，开始价格分析和预警监控",
+			zap.String("sync_time", time.Now().Format("15:04:05")))
 	}
 
 	// 创建对齐到K线时间的定时器
@@ -57,22 +58,29 @@ func (s *Scheduler) Start(ctx context.Context) {
 }
 
 func (s *Scheduler) runAnalysis() {
-	fmt.Printf("\n--- 价格分析任务 [%s] ---\n", time.Now().Format("15:04:05"))
+	zap.L().Info("--- 价格分析任务开始 ---",
+		zap.String("time", time.Now().Format("15:04:05")))
 
 	// 显示存储状态
 	stats := s.stateManager.GetRedisStats()
-	fmt.Printf("📊 存储状态: 内存中%d个交易对", stats["memory_symbols"])
 	if stats["redis_enabled"].(bool) {
 		if redisKeys, ok := stats["redis_keys"]; ok {
-			fmt.Printf(", Redis中%d个key", redisKeys)
+			zap.L().Info("📊 存储状态",
+				zap.Int("memory_symbols", stats["memory_symbols"].(int)),
+				zap.Int("redis_keys", redisKeys.(int)))
+		} else {
+			zap.L().Info("📊 存储状态",
+				zap.Int("memory_symbols", stats["memory_symbols"].(int)),
+				zap.String("redis_status", "已连接但获取key数失败"))
 		}
 	} else {
-		fmt.Printf(", Redis未启用")
+		zap.L().Info("📊 存储状态",
+			zap.Int("memory_symbols", stats["memory_symbols"].(int)),
+			zap.String("redis_status", "未启用"))
 	}
-	fmt.Println()
 
 	s.analysisEngine.AnalyzeAll()
-	fmt.Println("--- 分析任务完成 ---")
+	zap.L().Info("--- 分析任务完成 ---")
 }
 
 // calculateNextKlineTime 计算下一个K线对齐的时间点
@@ -103,7 +111,7 @@ func (s *Scheduler) startKlineAlignedAnalysis(ctx context.Context) {
 	for {
 		select {
 		case <-ctx.Done():
-			fmt.Println("📴 调度器已停止")
+			zap.L().Info("📴 调度器已停止")
 			return
 		default:
 			// 运行分析
@@ -113,13 +121,14 @@ func (s *Scheduler) startKlineAlignedAnalysis(ctx context.Context) {
 			nextAnalysisTime := s.calculateNextKlineTime()
 			waitDuration := time.Until(nextAnalysisTime)
 
-			fmt.Printf("⏰ 下次分析时间: %s（等待 %v）\n",
-				nextAnalysisTime.Format("15:04:05"), waitDuration)
+			zap.L().Info("⏰ 下次分析时间",
+				zap.String("next_time", nextAnalysisTime.Format("15:04:05")),
+				zap.Duration("wait_duration", waitDuration))
 
 			// 等待到下一个K线时间点
 			select {
 			case <-ctx.Done():
-				fmt.Println("📴 调度器已停止")
+				zap.L().Info("📴 调度器已停止")
 				return
 			case <-time.After(waitDuration):
 				// 继续下一轮分析

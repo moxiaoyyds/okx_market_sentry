@@ -1,10 +1,10 @@
 package analyzer
 
 import (
-	"fmt"
 	"sync"
 	"time"
 
+	"go.uber.org/zap"
 	"okx-market-sentry/internal/notifier"
 	"okx-market-sentry/internal/storage"
 	"okx-market-sentry/pkg/types"
@@ -37,7 +37,7 @@ func (ae *AnalysisEngine) AnalyzeAll() {
 		return
 	}
 
-	fmt.Printf("开始分析 %d 个交易对的价格变化...\n", len(symbols))
+	zap.L().Info("开始分析价格变化", zap.Int("symbol_count", len(symbols)))
 
 	// 并发分析各个交易对，收集预警
 	var wg sync.WaitGroup
@@ -60,9 +60,9 @@ func (ae *AnalysisEngine) AnalyzeAll() {
 	// 批量发送预警
 	if len(alerts) > 0 {
 		ae.sendBatchAlerts(alerts)
-		fmt.Printf("✅ 分析完成，触发 %d 个预警\n", len(alerts))
+		zap.L().Info("✅ 分析完成，触发预警", zap.Int("alert_count", len(alerts)))
 	} else {
-		fmt.Printf("✅ 分析完成，暂无异常波动\n")
+		zap.L().Info("✅ 分析完成，暂无异常波动")
 	}
 }
 
@@ -114,7 +114,9 @@ func (ae *AnalysisEngine) sendBatchAlerts(alerts []*types.AlertData) {
 	if len(alerts) == 1 {
 		err := ae.notifier.SendAlert(alerts[0])
 		if err != nil {
-			fmt.Printf("❌ 发送预警失败: %s - %v\n", alerts[0].Symbol, err)
+			zap.L().Error("发送预警失败",
+				zap.String("symbol", alerts[0].Symbol),
+				zap.Error(err))
 		}
 		return
 	}
@@ -122,11 +124,13 @@ func (ae *AnalysisEngine) sendBatchAlerts(alerts []*types.AlertData) {
 	// 批量发送多个预警
 	err := ae.notifier.SendBatchAlerts(alerts)
 	if err != nil {
-		fmt.Printf("❌ 批量发送预警失败: %v\n", err)
+		zap.L().Error("批量发送预警失败", zap.Error(err))
 		// 降级为单个发送
 		for _, alert := range alerts {
 			if singleErr := ae.notifier.SendAlert(alert); singleErr != nil {
-				fmt.Printf("❌ 单个预警发送失败: %s - %v\n", alert.Symbol, singleErr)
+				zap.L().Error("单个预警发送失败",
+					zap.String("symbol", alert.Symbol),
+					zap.Error(singleErr))
 			}
 		}
 	}
