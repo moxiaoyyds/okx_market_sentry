@@ -37,29 +37,23 @@ func (s *Scheduler) Start(ctx context.Context) {
 	// 启动数据获取器
 	go s.dataFetcher.Start(ctx)
 
-	// 等待一些数据积累后再开始分析
-	fmt.Printf("⏳ 等待数据积累中，%v后开始价格分析...\n", s.monitorPeriod)
+	// 计算下一个K线对齐的时间点
+	nextKlineTime := s.calculateNextKlineTime()
+	waitDuration := time.Until(nextKlineTime)
+
+	fmt.Printf("⏳ 等待同步到下一个K线时间点 %s（等待 %v）...\n",
+		nextKlineTime.Format("15:04:05"), waitDuration)
 
 	select {
 	case <-ctx.Done():
 		return
-	case <-time.After(s.monitorPeriod):
-		fmt.Println("✅ 开始价格分析和预警监控")
+	case <-time.After(waitDuration):
+		fmt.Printf("✅ 已同步到K线时间 %s，开始价格分析和预警监控\n",
+			time.Now().Format("15:04:05"))
 	}
 
-	// 启动分析任务
-	analyzeTicker := time.NewTicker(s.analyzeInterval)
-	defer analyzeTicker.Stop()
-
-	for {
-		select {
-		case <-ctx.Done():
-			fmt.Println("📴 调度器已停止")
-			return
-		case <-analyzeTicker.C:
-			s.runAnalysis()
-		}
-	}
+	// 创建对齐到K线时间的定时器
+	s.startKlineAlignedAnalysis(ctx)
 }
 
 func (s *Scheduler) runAnalysis() {
@@ -79,4 +73,58 @@ func (s *Scheduler) runAnalysis() {
 
 	s.analysisEngine.AnalyzeAll()
 	fmt.Println("--- 分析任务完成 ---")
+}
+
+// calculateNextKlineTime 计算下一个K线对齐的时间点
+func (s *Scheduler) calculateNextKlineTime() time.Time {
+	now := time.Now()
+
+	// 获取监控周期的分钟数
+	periodMinutes := int(s.monitorPeriod.Minutes())
+
+	// 计算当前小时内的分钟数，向上取整到下一个周期倍数
+	currentMinute := now.Minute()
+	nextAlignedMinute := ((currentMinute / periodMinutes) + 1) * periodMinutes
+
+	// 如果超过60分钟，进入下一小时
+	if nextAlignedMinute >= 60 {
+		// 进入下一小时的对齐时间点
+		nextHour := now.Hour() + 1
+		nextAlignedMinute = 0
+		return time.Date(now.Year(), now.Month(), now.Day(), nextHour, nextAlignedMinute, 0, 0, now.Location())
+	}
+
+	// 同一小时内的对齐时间点
+	return time.Date(now.Year(), now.Month(), now.Day(), now.Hour(), nextAlignedMinute, 0, 0, now.Location())
+}
+
+// startKlineAlignedAnalysis 启动对齐到K线时间的分析任务
+func (s *Scheduler) startKlineAlignedAnalysis(ctx context.Context) {
+	for {
+		select {
+		case <-ctx.Done():
+			fmt.Println("📴 调度器已停止")
+			return
+		default:
+			// 运行分析
+			s.runAnalysis()
+
+			// 计算下一次分析时间（下一个K线时间点）
+			nextAnalysisTime := s.calculateNextKlineTime()
+			waitDuration := time.Until(nextAnalysisTime)
+
+			fmt.Printf("⏰ 下次分析时间: %s（等待 %v）\n",
+				nextAnalysisTime.Format("15:04:05"), waitDuration)
+
+			// 等待到下一个K线时间点
+			select {
+			case <-ctx.Done():
+				fmt.Println("📴 调度器已停止")
+				return
+			case <-time.After(waitDuration):
+				// 继续下一轮分析
+				continue
+			}
+		}
+	}
 }
