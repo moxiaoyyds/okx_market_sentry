@@ -14,7 +14,6 @@ import (
 
 	okxcommon "github.com/nntaoli-project/goex/v2/okx/common"
 	"go.uber.org/zap"
-	"okx-market-sentr
 	"okx-market-sentry/internal/storage"
 	"okx-market-sentry/pkg/types"
 )
@@ -91,8 +90,8 @@ func (f *DataFetcher) Start(ctx context.Context) {
 	}
 }
 
+func (f *DataFetcher) fetchAndStore() {
 	zap.L().Info("🔄 正在使用goex v2获取OKX市场数据...",
-	zap.L().Info("🔄 正在使用goex v2获取OKX市场数据...", 
 		zap.String("time", time.Now().Format("15:04:05")))
 
 	// 获取所有现货交易对的ticker数据
@@ -115,8 +114,8 @@ func (f *DataFetcher) Start(ctx context.Context) {
 			}
 		}
 	}
+
 	zap.L().Info("✅ 获取到交易对数据",
-	zap.L().Info("✅ 获取到交易对数据", 
 		zap.Int("total_count", count),
 		zap.Int("usdt_count", usdtCount))
 }
@@ -190,8 +189,8 @@ func (f *DataFetcher) getTickers() ([]Ticker, error) {
 				usdtTickers = append(usdtTickers, ticker)
 			}
 		}
+
 		zap.L().Info("📊 使用代理从交易对中筛选出USDT交易对",
-		zap.L().Info("📊 使用代理从交易对中筛选出USDT交易对", 
 			zap.Int("total_pairs", len(apiResp.Data)),
 			zap.Int("usdt_pairs", len(usdtTickers)))
 		return usdtTickers, nil

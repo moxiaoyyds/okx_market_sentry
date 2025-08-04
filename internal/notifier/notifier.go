@@ -14,6 +14,8 @@ import (
 	"strings"
 	"time"
 	"unicode/utf8"
+
+	"go.uber.org/zap"
 )
 
 // safePadding 安全地计算填充空格数量，避免负数
@@ -559,14 +561,14 @@ type DingTalkResponse struct {
 func NewDingTalkNotifier(webhookURL, secret string) Interface {
 	// 如果没有配置webhook URL，返回控制台通知器
 	if webhookURL == "" {
-		fmt.Println("🔧 未配置钉钉Webhook URL，使用控制台输出模式")
+		zap.L().Info("🔧 未配置钉钉Webhook URL，使用控制台输出模式")
 		return NewConsoleNotifier()
 	}
 
 	if secret != "" {
-		fmt.Println("✅ 已配置钉钉通知服务（含加签验证）")
+		zap.L().Info("✅ 已配置钉钉通知服务（含加签验证）")
 	} else {
-		fmt.Println("⚠️ 钉钉通知已配置，但未设置secret（建议配置加签验证）")
+		zap.L().Warn("⚠️ 钉钉通知已配置，但未设置secret（建议配置加签验证）")
 	}
 
 	return &DingTalkNotifier{
@@ -599,7 +601,9 @@ func (dtn *DingTalkNotifier) SendAlert(alert *types.AlertData) error {
 		return console.SendAlert(alert)
 	}
 
-	fmt.Printf("✅ 钉钉通知已发送: %s 变化 %+.2f%%\n", alert.Symbol, alert.ChangePercent)
+	zap.L().Info("✅ 钉钉通知已发送",
+		zap.String("symbol", alert.Symbol),
+		zap.Float64("change_percent", alert.ChangePercent))
 
 	return nil
 }
@@ -626,13 +630,13 @@ func (dtn *DingTalkNotifier) SendBatchAlerts(alerts []*types.AlertData) error {
 	// 发送钉钉通知
 	err := dtn.sendDingTalkMessage(title, content)
 	if err != nil {
-		fmt.Printf("❌ 钉钉批量发送失败: %v，降级为控制台输出\n", err)
+		zap.L().Error("❌ 钉钉批量发送失败，降级为控制台输出", zap.Error(err))
 		// 降级为控制台输出
 		console := NewConsoleNotifier()
 		return console.SendBatchAlerts(alerts)
 	}
 
-	fmt.Printf("✅ 钉钉批量通知已发送: %d个币种预警\n", len(alerts))
+	zap.L().Info("✅ 钉钉批量通知已发送", zap.Int("alert_count", len(alerts)))
 	return nil
 }
 
