@@ -10,7 +10,7 @@ RUN go mod tidy
 COPY . .
 
 # 构建应用
-RUN CGO_ENABLED=0 GOOS=linux go build -a -installsuffix cgo -o okx-sentry cmd/main.go
+RUN CGO_ENABLED=0 GOOS=linux go build -a -installsuffix cgo -o okx-sentry ./cmd/
 
 # 第二阶段：运行时镜像
 FROM alpine:latest

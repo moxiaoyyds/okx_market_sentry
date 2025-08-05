@@ -60,7 +60,7 @@ database:
 
 # WebSocket配置
 websocket:
-  okx_endpoint: "wss://ws.okx.com:8443/ws/v5/public"  # OKX WebSocket公共频道地址
+  okx_endpoint: "wss://ws.okx.com:8443/ws/v5/business"  # OKX WebSocket业务频道地址
   reconnect_interval: 5s             # 重连间隔时间
   ping_interval: 20s                 # 心跳间隔时间
   max_reconnect_attempts: 10         # 最大重连尝试次数

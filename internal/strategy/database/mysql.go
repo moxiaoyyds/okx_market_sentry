@@ -310,6 +310,64 @@ func (m *Manager) GetStrategyPerformance(symbol string, days int) ([]StrategyPer
 	return performances, err
 }
 
+// BatchSaveKlines 批量保存K线数据
+func (m *Manager) BatchSaveKlines(klines []*types.KLine) error {
+	if len(klines) == 0 {
+		return nil
+	}
+
+	// 转换为数据库模型
+	dbKlines := make([]KLine, 0, len(klines))
+	for _, kline := range klines {
+		dbKline := KLine{
+			Symbol:    kline.Symbol,
+			OpenTime:  kline.OpenTime.Unix(),
+			CloseTime: kline.CloseTime.Unix(),
+			Open:      kline.Open,
+			High:      kline.High,
+			Low:       kline.Low,
+			Close:     kline.Close,
+			Volume:    kline.Volume,
+			Interval:  kline.Interval,
+			CreatedAt: time.Now(),
+		}
+		dbKlines = append(dbKlines, dbKline)
+	}
+
+	// 批量插入，使用ON CONFLICT处理重复键
+	tx := m.db.Begin()
+	if tx.Error != nil {
+		return tx.Error
+	}
+
+	// 分批处理避免单个事务过大
+	batchSize := 100
+	for i := 0; i < len(dbKlines); i += batchSize {
+		end := i + batchSize
+		if end > len(dbKlines) {
+			end = len(dbKlines)
+		}
+
+		batch := dbKlines[i:end]
+
+		// 使用CreateInBatches进行批量插入
+		if err := tx.CreateInBatches(batch, len(batch)).Error; err != nil {
+			tx.Rollback()
+			return fmt.Errorf("批量插入K线数据失败: %v", err)
+		}
+	}
+
+	if err := tx.Commit().Error; err != nil {
+		return fmt.Errorf("提交批量插入事务失败: %v", err)
+	}
+
+	zap.L().Debug("✅ 批量保存K线数据完成",
+		zap.Int("count", len(klines)),
+		zap.String("first_symbol", klines[0].Symbol))
+
+	return nil
+}
+
 // Close 关闭数据库连接
 func (m *Manager) Close() error {
 	sqlDB, err := m.db.DB()
