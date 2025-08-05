@@ -12,11 +12,12 @@
 
 ### 📈 唐奇安通道量化策略 (New)
 - 🎯 **专业策略**: 基于唐奇安通道 + ATR + 成交量的量化交易策略
-- 📡 **实时数据**: WebSocket 实时接收 OKX 市场数据，5分钟K线分析
+- 📡 **实时数据**: WebSocket 实时接收 OKX 业务数据，支持多时间周期K线分析
 - 🧮 **技术指标**: 集成唐奇安通道、ATR线性回归分析、成交量突破检测
 - 🎚️ **信号检测**: 多重条件验证，包括盘整检测、趋势确认、突破验证
+- 📚 **历史数据**: 程序启动时自动获取历史K线数据初始化指标计算
 - 📊 **性能监控**: 实时统计信号质量、数据库性能、WebSocket连接状态
-- 🗄️ **数据持久化**: MySQL存储K线数据和交易信号，支持历史回测
+- 🗄️ **数据持久化**: MySQL存储K线数据和交易信号，支持历史回测分析
 
 ### 🛠️ 系统特性
 - 💾 **双重存储**: 内存主存储 + Redis 异步备份，确保数据安全
@@ -369,7 +370,7 @@ mysql -h localhost -u root -pokx123456 -D okx_strategy -e "DESCRIBE klines;"
 curl -x http://127.0.0.1:7890 https://www.okx.com/api/v5/market/tickers?instType=SPOT
 
 # 测试WebSocket连接 (唐奇安策略)
-wscat -c wss://ws.okx.com:8443/ws/v5/public
+wscat -c wss://ws.okx.com:8443/ws/v5/business
 
 # 验证DNS解析
 nslookup www.okx.com
