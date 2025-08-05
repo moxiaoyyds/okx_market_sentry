@@ -1,70 +1,15 @@
 package types
 
-import "time"
-
-// PriceDataPoint 价格数据点
-type PriceDataPoint struct {
-	Price     float64   `json:"price"`
-	Timestamp time.Time `json:"timestamp"`
-}
-
-// AlertData 预警数据
-type AlertData struct {
-	Symbol        string        `json:"symbol"`
-	CurrentPrice  float64       `json:"current_price"`
-	PastPrice     float64       `json:"past_price"`
-	ChangePercent float64       `json:"change_percent"`
-	AlertTime     time.Time     `json:"alert_time"`
-	MonitorPeriod time.Duration `json:"monitor_period"` // 监控周期
-}
-
-// Config 配置结构
-type Config struct {
-	LogLevel string         `mapstructure:"log_level"` // 兼容保留
-	Log      LogConfig      `mapstructure:"log"`
-	Redis    RedisConfig    `mapstructure:"redis"`
-	DingTalk DingTalkConfig `mapstructure:"dingtalk"`
-	PushPlus PushPlusConfig `mapstructure:"pushplus"`
-	Alert    AlertConfig    `mapstructure:"alert"`
-	Fetch    FetchConfig    `mapstructure:"fetch"`
-	Network  NetworkConfig  `mapstructure:"network"`
-}
-
-type LogConfig struct {
-	Level      string `mapstructure:"level"`       // 日志级别
-	FilePath   string `mapstructure:"file_path"`   // 日志输出路径名
-	MaxSize    int    `mapstructure:"max_size"`    // 日志文件大小 单位：MB，超限后会自动切割
-	MaxAge     int    `mapstructure:"max_age"`     // 日志文件存放时间 单位：天
-	MaxBackups int    `mapstructure:"max_backups"` // 日志文件备份数量
-	Compress   bool   `mapstructure:"compress"`    // 日志文件压缩
-}
-
-type RedisConfig struct {
-	URL      string `mapstructure:"url"`
-	Password string `mapstructure:"password"`
-	DB       int    `mapstructure:"db"`
-}
-
-type DingTalkConfig struct {
-	WebhookURL string `mapstructure:"webhook_url"`
-	Secret     string `mapstructure:"secret"`
-}
-
-type PushPlusConfig struct {
-	UserToken string `mapstructure:"user_token"`
-	To        string `mapstructure:"to"` // 好友令牌，多人用逗号分隔
-}
-
-type AlertConfig struct {
-	Threshold     float64       `mapstructure:"threshold"`
-	MonitorPeriod time.Duration `mapstructure:"monitor_period"` // 监控周期，用于价格对比
-}
-
-type FetchConfig struct {
-	Interval time.Duration `mapstructure:"interval"`
-}
-
-type NetworkConfig struct {
-	Proxy   string        `mapstructure:"proxy"`   // HTTP代理地址，如 http://127.0.0.1:7890
-	Timeout time.Duration `mapstructure:"timeout"` // 网络超时时间
-}
+// 此文件作为类型定义的入口文件，用于统一导出所有类型
+// 具体的类型定义已拆分到不同的文件中：
+//
+// config.go     - 配置相关类型
+// market.go     - 市场数据相关类型
+// strategy.go   - 策略配置相关类型
+// indicators.go - 技术指标相关类型
+//
+// 使用方式：
+// import "okx-market-sentry/pkg/types"
+// config := &types.Config{}
+// kline := &types.KLine{}
+// signal := &types.TradingSignal{}

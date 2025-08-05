@@ -33,3 +33,34 @@ pushplus:
 network:
   proxy:        # HTTP代理地址，如需要请填写: http://127.0.0.1:7890
   timeout: 30s  # 网络请求超时时间
+
+# 唐奇安通道策略配置
+strategy:
+  donchian:
+    enabled: true                      # 是否启用唐奇安通道策略
+    symbols: ["BTC-USDT", "ETH-USDT", "SOL-USDT"]  # 监控的交易对列表
+    interval: 15m                    # K线周期，支持: 1m, 3m, 5m, 15m, 30m, 1H, 2H, 4H, 6H, 12H, 1D
+    donchian_length: 30                # 唐奇安通道长度，计算最近N根K线的最高/最低价
+    donchian_offset: 1                 # 唐奇安通道偏移，1表示不包含当前K线
+    atr_length: 14                     # ATR指标长度，计算平均真实波幅的周期数
+    consolidation_bars: 45             # 盘整检测K线数，判断盘整状态需要的最小K线数量
+    volume_multiplier: 3.0             # 成交量倍数，突破时成交量必须是前一根K线的倍数
+    min_signal_strength: 0.7           # 最小信号强度，0-1之间，过滤弱信号
+
+# 数据库配置
+database:
+  mysql:
+    host: mysql                        # MySQL服务器地址（Docker容器内使用服务名）
+    port: 3306                         # MySQL端口
+    username: root                     # 数据库用户名
+    password: "okx123456"              # 数据库密码
+    database: okx_strategy             # 数据库名称
+    max_idle_conns: 10                 # 最大空闲连接数
+    max_open_conns: 100                # 最大打开连接数
+
+# WebSocket配置
+websocket:
+  okx_endpoint: "wss://ws.okx.com:8443/ws/v5/public"  # OKX WebSocket公共频道地址
+  reconnect_interval: 5s             # 重连间隔时间
+  ping_interval: 20s                 # 心跳间隔时间
+  max_reconnect_attempts: 10         # 最大重连尝试次数
